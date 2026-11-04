@@ -119,6 +119,19 @@ class SudemiOrders
         $status = isset($response['status']) ? (int) $response['status'] : 0;
         $body = isset($response['body']) ? $response['body'] : [];
 
+        if ($status === 200 && isset($body['status']) && $body['status'] === 'ok'
+            && isset($body['payment']) && $body['payment'] === 'waiting_for_other_shops') {
+            // Accepted, but not paid. The buyer paid several shops in one payment and a card
+            // authorisation can be captured only once, so sudemi takes the money when the last of
+            // them has answered and says so in settled_orders on a later heartbeat. Until then
+            // the order keeps its unpaid state and has no address: shipping it now could mean
+            // shipping goods nobody ever pays for.
+            self::note($order, 'Accepted on sudemi. The buyer paid several shops in one payment; sudemi '
+                . 'takes the money once every shop has answered. Do NOT ship until this order is marked '
+                . 'as paid.');
+            return;
+        }
+
         if ($status === 200 && isset($body['status']) && $body['status'] === 'ok') {
             // The address arrives only now. sudemi withholds it while the order is still being
             // decided, because answering "do I have stock" needs nobody's address -- so this is
@@ -347,6 +360,77 @@ class SudemiOrders
         }
 
         return $order;
+    }
+
+    /**
+     * Works through the settled_orders block of a heartbeat.
+     *
+     * These are orders this shop accepted while the buyer's payment still had other shops to
+     * hear from. sudemi repeats each one for a week, so applying one must change nothing the
+     * second time: only an order still in its unpaid state here is touched, and every outcome
+     * moves it out of that state.
+     *
+     * @param array $settled The settled_orders block of a heartbeat response
+     */
+    public static function handleSettled($settled)
+    {
+        if (empty($settled) || !is_array($settled)) {
+            return;
+        }
+        foreach ($settled as $entry) {
+            if (!is_array($entry) || empty($entry['order_id']) || empty($entry['status'])) {
+                continue;
+            }
+            try {
+                self::settle($entry);
+            } catch (Exception $e) {
+                SudemiLogger::warn(sprintf(
+                    'Could not apply the outcome of sudemi order %s: %s',
+                    $entry['order_id'],
+                    $e->getMessage()
+                ));
+            }
+        }
+    }
+
+    /** Paid means ship it; declined means it never happened. */
+    private static function settle(array $settled)
+    {
+        $sudemiId = (string) $settled['order_id'];
+        $state = (string) $settled['status'];
+        if ($state === 'ACCEPTED' || $state === 'AWAITING_SELLER') {
+            return;
+        }
+        $order = self::findLocalOrder($sudemiId);
+        // Only an order still unpaid here. One already paid, shipped or cancelled was settled
+        // before -- by an earlier beat, or by an accept that captured straight away.
+        if (!$order || (int) $order->current_state !== (int) Configuration::get('PS_OS_PREPARATION')) {
+            return;
+        }
+
+        if ($state === 'DECLINED') {
+            // Released without being charged: the capture failed, or the authorisation lapsed
+            // before the last shop answered. The local order must not survive, and the stock it
+            // reserved goes back.
+            $reason = !empty($settled['declined_reason']) ? (string) $settled['declined_reason'] : 'reason not given';
+            self::restock($order);
+            self::setState($order, (int) Configuration::get('PS_OS_CANCELED'));
+            SudemiLogger::warn(sprintf(
+                'sudemi order %s was released after all: %s. The local order was cancelled and stock restored.',
+                $sudemiId,
+                $reason
+            ));
+            return;
+        }
+
+        // PAID, or already further along: the money was taken, and only now is the address released.
+        self::fillCustomer($order, $sudemiId);
+        self::setState($order, (int) Configuration::get('PS_OS_PAYMENT'));
+        SudemiLogger::info(sprintf(
+            'sudemi order %s is paid; order %s can be shipped.',
+            $sudemiId,
+            $order->reference
+        ));
     }
 
     /** @param Order $order */

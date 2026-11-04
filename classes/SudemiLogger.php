@@ -24,6 +24,11 @@ class SudemiLogger
         self::write('warn', $message);
     }
 
+    public static function error($message)
+    {
+        self::write('error', $message);
+    }
+
     public static function entries()
     {
         $raw = Configuration::get(self::CONF);
