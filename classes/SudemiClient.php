@@ -1,0 +1,190 @@
+<?php
+/**
+ * Every call this shop makes to sudemi, signed.
+ *
+ * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
+ */
+
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
+class SudemiClient
+{
+    const CONF_INSTALL_ID = 'SUDEMI_INSTALL_ID';
+    const CONF_API_BASE = 'SUDEMI_API_BASE';
+
+    const DEFAULT_API_BASE = 'https://api.sudemi.com';
+    /**
+     * How many times to wait when sudemi says this shop is pushing too fast. Two, because the
+     * window is a minute: a shop still throttled after two waits is sending far more than the
+     * limit and should resume on its next run rather than hold a cron slot open.
+     */
+    const RATE_LIMIT_RETRIES = 2;
+
+    /** A cap, so a strange Retry-After cannot park a cron run for an hour. */
+    const RATE_LIMIT_MAX_WAIT = 90;
+
+    const TIMEOUT_SECONDS = 20;
+
+    public static function apiBase()
+    {
+        $configured = Configuration::get(self::CONF_API_BASE);
+        $base = (is_string($configured) && $configured !== '') ? $configured : self::DEFAULT_API_BASE;
+
+        return rtrim($base, '/');
+    }
+
+    public static function installId()
+    {
+        $id = Configuration::get(self::CONF_INSTALL_ID);
+
+        return (is_string($id) && $id !== '') ? $id : null;
+    }
+
+    public static function isConnected()
+    {
+        return self::installId() !== null && SudemiKeys::hasKey();
+    }
+
+    public static function postUnsigned($path, array $body)
+    {
+        return self::request($path, $body, false);
+    }
+
+    public static function postSigned($path, array $body)
+    {
+        return self::requestWithBackoff($path, $body, true);
+    }
+
+    /**
+     * Sends, and waits if sudemi says this shop is going too fast.
+     *
+     * sudemi caps how much catalogue one shop may push per minute, so a large import cannot take
+     * the service away from every other shop. A 429 is therefore an ordinary part of a full sync
+     * rather than a failure: it means "not yet", and it says how long to wait.
+     *
+     * Treating it as a failure is what makes a large catalogue impossible to sync at all -- the
+     * batch stops, the sync is abandoned, and the next attempt gets exactly as far.
+     */
+    /**
+     * A signed GET.
+     *
+     * The canonical string carries the method, so a GET cannot be replayed as a POST or the
+     * other way round. Used for reading a confirmed order's delivery address, which is the one
+     * thing sudemi hands back rather than receives.
+     */
+    public static function getSigned($path)
+    {
+        return self::requestWithBackoff($path, [], true, 'GET');
+    }
+
+    private static function requestWithBackoff($path, array $body, $signed, $method = 'POST')
+    {
+        $attempt = 0;
+        while (true) {
+            $response = self::request($path, $body, $signed, $method);
+            if ($response === null || (int) $response['status'] !== 429) {
+                return $response;
+            }
+            ++$attempt;
+            if ($attempt > self::RATE_LIMIT_RETRIES) {
+                SudemiLogger::warn(
+                    'sudemi is still asking this shop to slow down. Stopping for now; this '
+                    . 'continues on the next cron run and nothing has been lost.'
+                );
+
+                return $response;
+            }
+            $wait = isset($response['retry_after']) ? (int) $response['retry_after'] : 60;
+            // Capped: a proxy could return an absurd value, and a cron run that sleeps for an
+            // hour is worse than one that gives up and retries later.
+            $wait = max(1, min(self::RATE_LIMIT_MAX_WAIT, $wait));
+            SudemiLogger::info('sudemi asked this shop to slow down; waiting ' . $wait . 's.');
+            sleep($wait);
+        }
+    }
+
+    /**
+     * @return array{status:int,body:array}|null null when the call could not be made at all
+     */
+    private static function request($path, array $body, $signed, $method = 'POST')
+    {
+        // A GET carries no body, and the signature covers the hash of the body actually sent --
+        // so it has to be the hash of nothing, not the hash of "{}".
+        $json = $method === 'GET' ? '' : json_encode($body);
+        if ($json === false) {
+            SudemiLogger::warn('A payload could not be encoded.');
+
+            return null;
+        }
+
+        $headers = ['Content-Type: application/json'];
+
+        if ($signed) {
+            $installId = self::installId();
+            if ($installId === null) {
+                return null;
+            }
+            $timestamp = (string) time();
+            $nonce = bin2hex(random_bytes(16));
+            $canonical = implode("\n", [$method, $path, $timestamp, $nonce, hash('sha256', $json)]);
+            $signature = SudemiKeys::sign($canonical);
+            if ($signature === null) {
+                return null;
+            }
+            $headers[] = 'Sudemi-Install: ' . $installId;
+            $headers[] = 'Sudemi-Timestamp: ' . $timestamp;
+            $headers[] = 'Sudemi-Nonce: ' . $nonce;
+            $headers[] = 'Sudemi-Signature: ' . $signature;
+        }
+
+        $curl = curl_init(self::apiBase() . $path);
+        curl_setopt_array($curl, [
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_POSTFIELDS => $json,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => self::TIMEOUT_SECONDS,
+            // Never relaxed, and deliberately not configurable: a shop that cannot verify the
+            // certificate is a shop whose catalogue could be rewritten in transit.
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_USERAGENT => 'sudemi-prestashop/' . SUDEMI_VERSION,
+        ]);
+        // Only Retry-After is read, and only so a throttled sync knows how long to pause.
+        $retryAfter = 0;
+        curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($handle, $header) use (&$retryAfter) {
+            if (stripos($header, 'retry-after:') === 0) {
+                $retryAfter = (int) trim(substr($header, strlen('retry-after:')));
+            }
+
+            return strlen($header);
+        });
+        $raw = curl_exec($curl);
+        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $error = curl_error($curl);
+        curl_close($curl);
+
+        if ($raw === false) {
+            SudemiLogger::warn('Could not reach sudemi: ' . $error);
+
+            return null;
+        }
+
+        $parsed = json_decode($raw, true);
+        // Fail closed: a response that does not parse is not success, whatever the status said.
+        if (!is_array($parsed) && $status !== 204) {
+            SudemiLogger::warn('sudemi answered ' . $status . ' with something that was not JSON.');
+
+            return null;
+        }
+
+        return [
+            'status' => $status,
+            'body' => is_array($parsed) ? $parsed : [],
+            'retry_after' => $retryAfter,
+        ];
+    }
+}
