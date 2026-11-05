@@ -265,6 +265,66 @@ class Sudemi extends Module
         return Tools::getAdminTokenLite('AdminModules') . '|' . $this->name;
     }
 
+    /**
+     * The shop's orders as sudemi holds them (approved, declined, shipped, who bought), shown on
+     * this page. Read from sudemi rather than from PrestaShop's own orders: an order sudemi
+     * declined because nobody answered in time leaves no local order at all.
+     *
+     * @return array|null null when sudemi could not be reached
+     */
+    private function orderHistory()
+    {
+        $response = SudemiClient::getSigned('/integration/v1/orders?limit=20');
+        if ($response === null || (int) $response['status'] !== 200 || !is_array($response['body'])) {
+            return null;
+        }
+        $body = $response['body'];
+        $labels = [
+            'AWAITING_SELLER' => $this->l('Waiting for you — buyer not charged'),
+            'ACCEPTED' => $this->l('Accepted — waiting for the other shops in the buyer\'s payment; buyer not charged yet, do not ship'),
+            'PAID' => $this->l('Confirmed and charged'),
+            'DECLINED' => $this->l('Declined — nothing charged'),
+            'SHIPPED' => $this->l('Shipped'),
+            'DELIVERED' => $this->l('Delivered'),
+            'CANCELLED' => $this->l('Cancelled'),
+            'REFUNDED' => $this->l('Refunded'),
+        ];
+        $rows = [];
+        foreach ((isset($body['orders']) && is_array($body['orders']) ? $body['orders'] : []) as $order) {
+            $items = [];
+            foreach ((isset($order['lines']) && is_array($order['lines']) ? $order['lines'] : []) as $line) {
+                $qty = isset($line['quantity']) ? (int) $line['quantity'] : 1;
+                $items[] = (isset($line['title']) ? (string) $line['title'] : '') . ($qty > 1 ? ' × ' . $qty : '');
+            }
+            $status = isset($order['status']) ? (string) $order['status'] : '';
+            $rows[] = [
+                'id' => Tools::substr((string) $order['order_id'], 0, 8),
+                'date' => isset($order['placed_at']) ? Tools::substr((string) $order['placed_at'], 0, 10) : '',
+                'items' => implode(', ', $items),
+                'status' => isset($labels[$status]) ? $labels[$status] : $status,
+                'net' => number_format((isset($order['your_net_minor']) ? (int) $order['your_net_minor'] : 0) / 100, 2)
+                    . ' ' . (isset($order['currency_code']) ? (string) $order['currency_code'] : 'EUR'),
+                // Only present once sudemi has released it, which is only after this shop confirmed.
+                'customer' => isset($order['customer_name']) ? (string) $order['customer_name'] : '—',
+            ];
+        }
+        $awaiting = isset($body['counts']['AWAITING_SELLER']) ? (int) $body['counts']['AWAITING_SELLER'] : 0;
+
+        return [
+            'rows' => $rows,
+            'awaiting' => $awaiting > 0 ? sprintf($this->l('Orders waiting to be confirmed: %d. Those buyers have not been charged yet.'), $awaiting) : '',
+            'labels' => [
+                'title' => $this->l('Orders through sudemi'),
+                'empty' => $this->l('No orders through sudemi yet.'),
+                'order' => $this->l('Order'),
+                'items' => $this->l('What sold'),
+                'status' => $this->l('Status'),
+                'net' => $this->l('You receive'),
+                'customer' => $this->l('Customer'),
+            ],
+        ];
+    }
+
     /** Shipping prices as sudemi buyers will see them, for the first active product. */
     private function shippingPreview()
     {
@@ -286,6 +346,7 @@ class Sudemi extends Module
         $status = SudemiHeartbeat::status();
 
         $this->context->smarty->assign([
+            'sudemi_history_error' => $this->l('Could not reach sudemi to load the order history just now. Nothing is wrong with the orders themselves; try again shortly.'),
             'sudemi_connected' => $connected,
             'sudemi_status' => $status,
             'sudemi_pending' => SudemiQueue::count(),
@@ -302,6 +363,7 @@ class Sudemi extends Module
             'sudemi_shipping_preview' => $this->shippingPreview(),
             'sudemi_carriers' => SudemiShipping::activeCarriers(),
             'sudemi_chosen_carriers' => SudemiShipping::chosenCarriers(),
+            'sudemi_history' => $connected ? $this->orderHistory() : null,
             'sudemi_supported' => $supported,
             'sudemi_claim_url' => $claimUrl,
             'sudemi_shop_url' => SudemiPairing::shopUrl(),

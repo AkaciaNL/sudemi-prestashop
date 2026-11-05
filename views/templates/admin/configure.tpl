@@ -90,6 +90,37 @@
       </tr>
     </table>
 
+    {if $sudemi_history === null}
+      <div class="alert alert-warning">{$sudemi_history_error|escape:'html':'UTF-8'}</div>
+    {else}
+      <h4>{$sudemi_history.labels.title|escape:'html':'UTF-8'}</h4>
+      {if $sudemi_history.awaiting}<div class="alert alert-warning">{$sudemi_history.awaiting|escape:'html':'UTF-8'}</div>{/if}
+      {if $sudemi_history.rows}
+        <table class="table" id="sudemi-order-history">
+          <thead><tr>
+            <th>{$sudemi_history.labels.order|escape:'html':'UTF-8'}</th>
+            <th>{$sudemi_history.labels.items|escape:'html':'UTF-8'}</th>
+            <th>{$sudemi_history.labels.status|escape:'html':'UTF-8'}</th>
+            <th>{$sudemi_history.labels.net|escape:'html':'UTF-8'}</th>
+            <th>{$sudemi_history.labels.customer|escape:'html':'UTF-8'}</th>
+          </tr></thead>
+          <tbody>
+          {foreach from=$sudemi_history.rows item=row}
+            <tr>
+              <td><code>{$row.id|escape:'html':'UTF-8'}</code><br><small>{$row.date|escape:'html':'UTF-8'}</small></td>
+              <td>{$row.items|escape:'html':'UTF-8'}</td>
+              <td>{$row.status|escape:'html':'UTF-8'}</td>
+              <td>{$row.net|escape:'html':'UTF-8'}</td>
+              <td>{$row.customer|escape:'html':'UTF-8'}</td>
+            </tr>
+          {/foreach}
+          </tbody>
+        </table>
+      {else}
+        <p class="help-block">{$sudemi_history.labels.empty|escape:'html':'UTF-8'}</p>
+      {/if}
+    {/if}
+
     <h4>{l s='Delivery to sudemi buyers' mod='sudemi'}</h4>
     {if $sudemi_shipping_preview}
       <p>{l s='Shipping prices sent to sudemi (from your carriers; one item, your first product):' mod='sudemi'}
