@@ -498,8 +498,59 @@ class SudemiOrders
         ));
     }
 
+    /** True while this module itself changes an order's state (so the status hook ignores it). */
+    public static $changingState = false;
+
+    /** Refund (amount null = in full) through sudemi; the outcome is noted on the order and logged. */
+    public static function refund($order, $amountMinor, $reason)
+    {
+        $sudemiId = self::sudemiIdOf($order);
+        if ($sudemiId === null) {
+            return;
+        }
+        $body = ['reason' => $reason];
+        if ($amountMinor !== null) {
+            $body['amountMinor'] = (int) $amountMinor;
+        }
+        self::noteMoneyResult($order, SudemiClient::postSigned('/integration/v1/orders/' . rawurlencode($sudemiId) . '/refund', $body));
+    }
+
+    /** A paid order cancelled in the shop: refunded in full and cancelled on sudemi. */
+    public static function cancel($order, $reason)
+    {
+        $sudemiId = self::sudemiIdOf($order);
+        if ($sudemiId === null) {
+            return;
+        }
+        self::noteMoneyResult($order, SudemiClient::postSigned('/integration/v1/orders/' . rawurlencode($sudemiId) . '/cancel', ['reason' => $reason]));
+    }
+
+    private static function noteMoneyResult($order, $response)
+    {
+        if (is_array($response) && (int) $response['status'] === 200) {
+            SudemiLogger::info('Order ' . $order->reference . ': refunded to the buyer through sudemi.');
+
+            return;
+        }
+        $message = is_array($response) && isset($response['body']['message']) ? (string) $response['body']['message']
+            : (is_array($response) ? (string) $response['status'] : 'sudemi could not be reached');
+        SudemiLogger::error('Order ' . $order->reference . ': sudemi did not refund this (' . $message
+            . '). The buyer has NOT been paid back; contact sudemi support.');
+    }
+
     /** @param Order $order */
     private static function setState($order, $state)
+    {
+        self::$changingState = true;
+        try {
+            self::applyState($order, $state);
+        } finally {
+            self::$changingState = false;
+        }
+    }
+
+    /** @param Order $order */
+    private static function applyState($order, $state)
     {
         if (!$state) {
             return;

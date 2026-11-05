@@ -12,6 +12,7 @@ function upgrade_module_1_2_0($module)
 {
     // moduleRoutes: the /.well-known/sudemi-challenge route was missing, so pairing could not finish.
     $ok = $module->registerHook('moduleRoutes')
+        && $module->registerHook('actionOrderSlipAdd')
         && $module->registerHook('actionCarrierUpdate')
         && $module->registerHook('actionObjectCarrierUpdateAfter');
     Configuration::updateValue('SUDEMI_RESYNC_DUE', 1);

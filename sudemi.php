@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.0');
+define('SUDEMI_VERSION', '1.2.1');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -59,6 +59,7 @@ class Sudemi extends Module
             // step that has to be remembered is a step that gets skipped.
             && $this->registerHook('actionOrderStatusPostUpdate')
             && $this->registerHook('moduleRoutes')
+            && $this->registerHook('actionOrderSlipAdd')
             && $this->registerHook('actionCarrierUpdate')
             && $this->registerHook('actionObjectCarrierUpdateAfter');
     }
@@ -135,6 +136,21 @@ class Sudemi extends Module
         }
 
         $status = $params['newOrderStatus'];
+        // sudemi holds the buyer's payment: a refund or cancellation made here has to reach it,
+        // or the shop records it and the buyer never gets the money back. The module's own
+        // cancellations (a released, never-charged order) are not sent.
+        if (!SudemiOrders::$changingState) {
+            if ((int) $status->id === (int) Configuration::get('PS_OS_REFUND')) {
+                SudemiOrders::refund($order, null, 'Refunded by the shop');
+
+                return;
+            }
+            if ((int) $status->id === (int) Configuration::get('PS_OS_CANCELED')) {
+                SudemiOrders::cancel($order, 'Cancelled by the shop');
+
+                return;
+            }
+        }
         $event = null;
         if (!empty($status->shipped)) {
             $event = 'shipped';
@@ -162,6 +178,27 @@ class Sudemi extends Module
                 'params' => ['fc' => 'module', 'module' => 'sudemi', 'controller' => 'challenge'],
             ],
         ];
+    }
+
+    /**
+     * A partial refund (credit slip) made in the back office is passed to sudemi, which pays it
+     * back to the buyer from the payment it holds.
+     */
+    public function hookActionOrderSlipAdd($params)
+    {
+        $order = isset($params['order']) ? $params['order'] : null;
+        if (!$order instanceof Order || SudemiOrders::sudemiIdOf($order) === null) {
+            return;
+        }
+        $row = Db::getInstance()->getRow('SELECT total_products_tax_incl, total_shipping_tax_incl FROM '
+            . _DB_PREFIX_ . 'order_slip WHERE id_order = ' . (int) $order->id . ' ORDER BY id_order_slip DESC');
+        if (!$row) {
+            return;
+        }
+        $amount = (int) round(((float) $row['total_products_tax_incl'] + (float) $row['total_shipping_tax_incl']) * 100);
+        if ($amount > 0) {
+            SudemiOrders::refund($order, $amount, 'Partial refund (credit slip)');
+        }
     }
 
     /** Shipping prices come from the carriers: a change there re-sends the catalogue on the next heartbeat. */
