@@ -269,7 +269,7 @@ class SudemiOrders
         }
 
         foreach ($lines as $line) {
-            $productId = isset($line['external_id']) ? (int) $line['external_id'] : 0;
+            list($productId, $attributeId) = SudemiSync::parseExternalId(isset($line['external_id']) ? $line['external_id'] : '0');
             if ($productId <= 0) {
                 return 'an item on the order is no longer sold here';
             }
@@ -281,7 +281,7 @@ class SudemiOrders
                 );
             }
             $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
-            if ((int) StockAvailable::getQuantityAvailableByProduct($productId) < $quantity) {
+            if ((int) StockAvailable::getQuantityAvailableByProduct($productId, $attributeId ?: null) < $quantity) {
                 return sprintf('"%s" is out of stock', $product->name);
             }
         }
@@ -343,9 +343,9 @@ class SudemiOrders
         }
 
         foreach ($pending['lines'] as $line) {
-            $productId = isset($line['external_id']) ? (int) $line['external_id'] : 0;
+            list($productId, $attributeId) = SudemiSync::parseExternalId(isset($line['external_id']) ? $line['external_id'] : '0');
             $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
-            if (!$cart->updateQty($quantity, $productId)) {
+            if (!$cart->updateQty($quantity, $productId, $attributeId ?: null)) {
                 $cart->delete();
                 return null;
             }

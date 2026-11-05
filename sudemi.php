@@ -94,7 +94,10 @@ class Sudemi extends Module
     public function hookActionUpdateQuantity($params)
     {
         if (!empty($params['id_product'])) {
-            SudemiSync::pushDelta((int) $params['id_product']);
+            SudemiSync::pushDelta(
+                (int) $params['id_product'],
+                !empty($params['id_product_attribute']) ? (int) $params['id_product_attribute'] : null
+            );
         }
     }
 

@@ -45,8 +45,7 @@ class SudemiSync
             }
             $payload = [];
             foreach ($products as $row) {
-                $item = self::productPayload((int) $row['id_product'], $languageId);
-                if ($item !== null) {
+                foreach (self::listings((int) $row['id_product'], $languageId) as $item) {
                     $payload[] = $item;
                 }
             }
@@ -78,8 +77,14 @@ class SudemiSync
         return true;
     }
 
-    /** One product's price and stock, as they change. Quiet on failure: a sudemi outage must not disturb the shop. */
-    public static function pushDelta($productId)
+    /**
+     * One product's price and stock, as they change; per combination when it has combinations
+     * (each is its own listing). Quiet on failure: a sudemi outage must not disturb the shop.
+     *
+     * @param int $productId
+     * @param int|null $attributeId only this combination (stock moves name one), null for all
+     */
+    public static function pushDelta($productId, $attributeId = null)
     {
         if (!SudemiClient::isConnected()) {
             return;
@@ -90,27 +95,108 @@ class SudemiSync
             return;
         }
 
-        $quantity = (int) StockAvailable::getQuantityAvailableByProduct((int) $product->id);
-        $update = [
-            'externalId' => (string) $product->id,
-            'priceMinor' => self::minor(Product::getPriceStatic((int) $product->id, true)),
-            'currency' => self::currency(),
-            'inStock' => $quantity > 0,
-            'quantity' => $quantity,
-        ];
+        $combinations = self::combinationIds($product);
+        $targets = empty($combinations) ? [0] : ($attributeId ? [(int) $attributeId] : $combinations);
+        $updates = [];
+        foreach ($targets as $paid) {
+            $quantity = (int) StockAvailable::getQuantityAvailableByProduct((int) $product->id, $paid ?: null);
+            $updates[] = [
+                'externalId' => self::externalId((int) $product->id, $paid),
+                'priceMinor' => self::minor(Product::getPriceStatic((int) $product->id, true, $paid ?: null)),
+                'currency' => self::currency(),
+                'inStock' => $quantity > 0,
+                'quantity' => $quantity,
+            ];
+        }
 
         // Counted before the attempt, not after a success: the counter is what lets sudemi
         // notice a change that never arrived, so it has to move even when the push fails.
         SudemiHeartbeat::noteChange();
 
-        $response = SudemiClient::postSigned('/integration/v1/products/prices', ['updates' => [$update]]);
+        $response = SudemiClient::postSigned('/integration/v1/products/prices', ['updates' => $updates]);
 
         // A dropped change is a wrong price on a marketplace until the next full sync, so a
         // failure is written down rather than logged and forgotten. The heartbeat drains it.
         if (!is_array($response) || $response['status'] !== 200) {
-            SudemiQueue::enqueue($update);
+            foreach ($updates as $update) {
+                SudemiQueue::enqueue($update);
+            }
             SudemiLogger::warn('A price update could not be sent; it is queued for retry.');
         }
+    }
+
+    /** "<id_product>" or, for a combination, "<id_product>-<id_product_attribute>". */
+    public static function externalId($productId, $attributeId)
+    {
+        return $attributeId ? $productId . '-' . $attributeId : (string) $productId;
+    }
+
+    /** [id_product, id_product_attribute] from an external id (0 = no combination). */
+    public static function parseExternalId($externalId)
+    {
+        $parts = explode('-', (string) $externalId, 2);
+
+        return [(int) $parts[0], isset($parts[1]) ? (int) $parts[1] : 0];
+    }
+
+    private static function combinationIds(Product $product)
+    {
+        $ids = [];
+        foreach ($product->getAttributeCombinations((int) Configuration::get('PS_LANG_DEFAULT')) as $row) {
+            $ids[(int) $row['id_product_attribute']] = true;
+        }
+
+        return array_keys($ids);
+    }
+
+    /**
+     * The listings one product becomes: itself, or one per combination (size, colour...), because
+     * a buyer buys a combination, never the product without one. Each has its own price, stock,
+     * reference, barcode and the combination's options in its title.
+     */
+    private static function listings($productId, $languageId)
+    {
+        $base = self::productPayload($productId, $languageId);
+        if ($base === null) {
+            return [];
+        }
+        $product = new Product($productId, true, $languageId);
+        $rows = $product->getAttributeCombinations($languageId);
+        if (empty($rows)) {
+            return [$base];
+        }
+        $byCombination = [];
+        foreach ($rows as $row) {
+            $byCombination[(int) $row['id_product_attribute']][] = $row;
+        }
+        $link = Context::getContext()->link;
+        $listings = [];
+        foreach ($byCombination as $paid => $attributes) {
+            $first = $attributes[0];
+            $item = $base;
+            $item['externalId'] = self::externalId($productId, $paid);
+            $item['title'] = $base['title'] . ' - ' . implode(', ', array_map(function ($a) {
+                return (string) $a['attribute_name'];
+            }, $attributes));
+            $item['sku'] = ((string) $first['reference']) !== '' ? (string) $first['reference'] : $base['sku'];
+            $gtin = ((string) $first['ean13']) !== '' ? (string) $first['ean13'] : (((string) $first['upc']) !== '' ? (string) $first['upc'] : null);
+            // A combination is a different item from its siblings: never inherit the product's barcode.
+            $item['gtin'] = $gtin;
+            $price = Product::getPriceStatic($productId, true, $paid);
+            $item['priceMinor'] = self::minor($price);
+            $quantity = (int) StockAvailable::getQuantityAvailableByProduct($productId, $paid);
+            $item['quantity'] = $quantity;
+            $item['inStock'] = $quantity > 0;
+            $item['weightGrams'] = (int) round(((float) $product->weight + (float) $first['weight']) * 1000);
+            $item['url'] = $link->getProductLink($product, null, null, null, null, null, $paid);
+            $item['specs'] = array_merge(array_map(function ($a) {
+                return ['name' => (string) $a['group_name'], 'values' => [(string) $a['attribute_name']]];
+            }, $attributes), $base['specs']);
+            $item['shipping'] = SudemiShipping::ratesFor($product, $price);
+            $listings[] = $item;
+        }
+
+        return $listings;
     }
 
     private static function pushShop()
