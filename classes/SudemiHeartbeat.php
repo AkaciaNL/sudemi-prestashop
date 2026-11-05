@@ -126,7 +126,8 @@ class SudemiHeartbeat
 
         // sudemi and this shop disagree about what the catalogue is, so something did not
         // arrive. A full sync is the only answer that does not involve guessing which product.
-        if (!empty($body['full_sync_requested'])) {
+        if (!empty($body['full_sync_requested']) || Configuration::get('SUDEMI_RESYNC_DUE')) {
+            Configuration::updateValue('SUDEMI_RESYNC_DUE', 0);
             SudemiLogger::info('sudemi asked for a full sync.');
             SudemiSync::runFull();
         }

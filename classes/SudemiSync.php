@@ -182,7 +182,7 @@ class SudemiSync
         return [
             'externalId' => (string) $product->id,
             'sku' => (string) $product->reference,
-            'gtin' => (string) $product->ean13,
+            'gtin' => ((string) $product->ean13) !== '' ? (string) $product->ean13 : (((string) $product->upc) !== '' ? (string) $product->upc : null),
             'mpn' => (string) $product->mpn,
             'title' => (string) $product->name,
             'description' => strip_tags((string) $product->description_short),
@@ -195,6 +195,11 @@ class SudemiSync
             'categoryExternalIds' => $categories,
             'images' => $images,
             'specs' => $specs,
+            // Without a shipping price for the buyer's country sudemi cannot offer the product.
+            'shipping' => SudemiShipping::ratesFor($product, Product::getPriceStatic($productId, true)),
+            'maxHandlingTimeDays' => SudemiShipping::handlingDays(),
+            'maxTransitTimeDays' => SudemiShipping::transitDays(),
+            'brand' => $product->id_manufacturer ? (string) Manufacturer::getNameById((int) $product->id_manufacturer) : null,
         ];
     }
 

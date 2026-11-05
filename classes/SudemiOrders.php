@@ -161,7 +161,7 @@ class SudemiOrders
         // money was taken, so the local order must not survive — and the stock it reserved has to
         // go back, or this shop slowly loses inventory to orders that never happened.
         $reason = isset($body['message']) ? (string) $body['message'] : sprintf('HTTP %d', $status);
-        self::restock($order);
+        // PrestaShop puts the stock back itself when an order moves to Canceled.
         self::setState($order, (int) Configuration::get('PS_OS_CANCELED'));
         SudemiLogger::warn(sprintf(
             'sudemi refused the confirmation of order %s: %s. The local order was cancelled and '
@@ -300,6 +300,30 @@ class SudemiOrders
      */
     private static function createLocalOrder(array $pending, $sudemiId)
     {
+        // PrestaShop refuses an order without a customer, addresses and a carrier
+        // ("Property Order->id_address_delivery is empty"), so every sudemi order used to fail
+        // here. The buyer's identity and address only arrive after payment (fillCustomer), so
+        // until then the order belongs to one sudemi guest customer, with a placeholder address
+        // in the destination country.
+        $customer = self::guestCustomer();
+        if (!$customer) {
+            return null;
+        }
+        $country = isset($pending['destination_country']) ? (string) $pending['destination_country'] : 'NL';
+        $address = new Address();
+        $address->id_customer = (int) $customer->id;
+        $address->id_country = (int) Country::getByIso($country) ?: (int) Configuration::get('PS_COUNTRY_DEFAULT');
+        $address->alias = 'sudemi';
+        $address->firstname = 'sudemi';
+        $address->lastname = 'buyer';
+        $address->address1 = 'Delivery address follows once paid';
+        $address->city = '-';
+        $address->postcode = '';
+        if (!$address->add()) {
+            return null;
+        }
+        $carrierId = SudemiShipping::deliveryCarrierId();
+
         $cart = new Cart();
         $cart->id_lang = (int) Configuration::get('PS_LANG_DEFAULT');
         $cart->id_currency = (int) Currency::getIdByIsoCode(
@@ -309,9 +333,11 @@ class SudemiOrders
             $cart->id_currency = (int) Configuration::get('PS_CURRENCY_DEFAULT');
         }
         $cart->id_shop = (int) Context::getContext()->shop->id;
-        // No buyer identity: sudemi does not send one with the question, because a shop deciding
-        // whether it has stock does not need to know who is asking. It arrives on confirmation.
-        $cart->id_customer = 0;
+        $cart->id_customer = (int) $customer->id;
+        $cart->id_address_delivery = (int) $address->id;
+        $cart->id_address_invoice = (int) $address->id;
+        $cart->id_carrier = $carrierId;
+        $cart->secure_key = $customer->secure_key;
         if (!$cart->add()) {
             return null;
         }
@@ -325,12 +351,18 @@ class SudemiOrders
             }
         }
 
+        $state = (int) Configuration::get('PS_OS_PREPARATION');
         $order = new Order();
         $order->id_cart = (int) $cart->id;
         $order->id_shop = (int) $cart->id_shop;
+        $order->id_shop_group = (int) Context::getContext()->shop->id_shop_group;
         $order->id_currency = (int) $cart->id_currency;
         $order->id_lang = (int) $cart->id_lang;
-        $order->id_customer = 0;
+        $order->id_customer = (int) $customer->id;
+        $order->id_address_delivery = (int) $address->id;
+        $order->id_address_invoice = (int) $address->id;
+        $order->id_carrier = $carrierId;
+        $order->secure_key = $customer->secure_key;
         $order->payment = 'sudemi';
         $order->module = 'sudemi';
         // Prefixed so a merchant scanning their order list can see at a glance where it came from.
@@ -338,28 +370,61 @@ class SudemiOrders
         $order->total_paid = isset($pending['total_minor']) ? ((int) $pending['total_minor']) / 100 : 0.0;
         $order->total_paid_real = 0.0;
         $order->total_paid_tax_incl = $order->total_paid;
+        $order->total_paid_tax_excl = $order->total_paid;
         $order->total_products = $order->total_paid;
         $order->total_products_wt = $order->total_paid;
+        $order->total_shipping = 0.0;
         // Awaiting payment rather than paid: an order that looks payable before the money is
         // taken is one somebody ships too early.
-        $order->current_state = (int) Configuration::get('PS_OS_PREPARATION');
+        $order->current_state = $state;
         $order->conversion_rate = 1.0;
+        $order->valid = 0;
         if (!$order->add()) {
             $cart->delete();
             return null;
         }
 
+        // The order's lines, as PrestaShop's own checkout writes them. createList also takes the
+        // stock (StockAvailable), so the shop cannot sell the same unit while the confirmation
+        // is in flight; PrestaShop puts it back when the order is cancelled. (Taking it here by hand as
+        // well, as before, would take it twice.)
+        $detail = new OrderDetail();
+        $detail->createList($order, $cart, $state, $cart->getProducts());
+
+        $history = new OrderHistory();
+        $history->id_order = (int) $order->id;
+        $history->id_order_state = $state;
+        $history->add();
+
         self::remember($order->id, $sudemiId);
 
-        // Taken now, with the order, so this storefront cannot sell the same unit while the
-        // confirmation is in flight. Put back by accept() if sudemi refuses.
-        foreach ($pending['lines'] as $line) {
-            $productId = isset($line['external_id']) ? (int) $line['external_id'] : 0;
-            $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
-            StockAvailable::updateQuantity($productId, null, -$quantity, $order->id_shop);
-        }
-
         return $order;
+    }
+
+    /** One guest customer per shop owns sudemi orders until the buyer's details arrive. */
+    private static function guestCustomer()
+    {
+        $id = (int) Configuration::get('SUDEMI_GUEST_CUSTOMER');
+        if ($id) {
+            $customer = new Customer($id);
+            if (Validate::isLoadedObject($customer)) {
+                return $customer;
+            }
+        }
+        $customer = new Customer();
+        $customer->firstname = 'sudemi';
+        $customer->lastname = 'buyer';
+        $customer->email = 'orders@sudemi.com';
+        $customer->is_guest = 1;
+        $customer->active = 1;
+        $customer->passwd = Tools::hash(Tools::passwdGen(32));
+        $customer->id_default_group = (int) Configuration::get('PS_GUEST_GROUP');
+        if (!$customer->add()) {
+            return null;
+        }
+        Configuration::updateValue('SUDEMI_GUEST_CUSTOMER', (int) $customer->id);
+
+        return $customer;
     }
 
     /**
@@ -413,7 +478,7 @@ class SudemiOrders
             // before the last shop answered. The local order must not survive, and the stock it
             // reserved goes back.
             $reason = !empty($settled['declined_reason']) ? (string) $settled['declined_reason'] : 'reason not given';
-            self::restock($order);
+            // PrestaShop puts the stock back itself when an order moves to Canceled.
             self::setState($order, (int) Configuration::get('PS_OS_CANCELED'));
             SudemiLogger::warn(sprintf(
                 'sudemi order %s was released after all: %s. The local order was cancelled and stock restored.',
@@ -431,19 +496,6 @@ class SudemiOrders
             $sudemiId,
             $order->reference
         ));
-    }
-
-    /** @param Order $order */
-    private static function restock($order)
-    {
-        foreach ($order->getProducts() as $line) {
-            StockAvailable::updateQuantity(
-                (int) $line['product_id'],
-                null,
-                (int) $line['product_quantity'],
-                (int) $order->id_shop
-            );
-        }
     }
 
     /** @param Order $order */

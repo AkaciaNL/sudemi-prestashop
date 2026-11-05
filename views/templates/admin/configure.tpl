@@ -90,6 +90,27 @@
       </tr>
     </table>
 
+    <h4>{l s='Delivery to sudemi buyers' mod='sudemi'}</h4>
+    {if $sudemi_shipping_preview}
+      <p>{l s='Shipping prices sent to sudemi (from your carriers; one item, your first product):' mod='sudemi'}
+        {foreach from=$sudemi_shipping_preview item=rate name=rates}{$rate.country|escape:'html':'UTF-8'} {($rate.costMinor/100)|string_format:'%.2f'} ({$rate.carrier|escape:'html':'UTF-8'}){if !$smarty.foreach.rates.last}, {/if}{/foreach}</p>
+      <p class="help-block">{l s='Countries without a fixed price (module-computed carriers, out-of-range weights or prices) are left out rather than guessed.' mod='sudemi'}</p>
+    {else}
+      <div class="alert alert-warning">{l s='No shipping price could be read from your carriers, so sudemi buyers cannot order. Give an active carrier a price or weight range for the zones you ship to.' mod='sudemi'}</div>
+    {/if}
+    <form method="post" action="{$sudemi_action|escape:'html':'UTF-8'}" class="form-inline">
+      <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
+      <p><strong>{l s='Carriers that deliver sudemi orders' mod='sudemi'}</strong> <span class="help-block">{l s='Leave pick-up-only carriers unticked: buyers would otherwise see their price as the shipping price.' mod='sudemi'}</span>
+        {foreach from=$sudemi_carriers key=ref item=name}
+          <label style="margin-right:1em"><input type="checkbox" name="sudemi_carriers[]" value="{$ref|intval}" {if $sudemi_chosen_carriers === null || in_array($ref, $sudemi_chosen_carriers)}checked{/if} /> {$name|escape:'html':'UTF-8'}</label>
+        {/foreach}
+      </p>
+      <label>{l s='Days until you dispatch an order (at most)' mod='sudemi'} <input type="number" min="0" max="60" name="handling_days" value="{$sudemi_handling_days|intval}" class="form-control" style="width:6em" /></label>
+      <label>{l s='Days the carrier takes (at most)' mod='sudemi'} <input type="number" min="0" max="60" name="transit_days" value="{$sudemi_transit_days|intval}" class="form-control" style="width:6em" /></label>
+      <button type="submit" name="sudemi_delivery" class="btn btn-default">{l s='Save delivery settings' mod='sudemi'}</button>
+      <p class="help-block">{l s='Buyers see the sum as the latest delivery estimate. Set your real times; the defaults are deliberately cautious.' mod='sudemi'}</p>
+    </form>
+
     <h4>{l s='Set on sudemi, not here' mod='sudemi'}</h4>
     <p>{l s='Your legal name, country, trader status and VAT number decide what a buyer is owed, so they are confirmed once on sudemi and changed there. This module cannot edit them.' mod='sudemi'}</p>
 

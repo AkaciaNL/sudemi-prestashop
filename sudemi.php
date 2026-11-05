@@ -14,13 +14,14 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.1.0');
+define('SUDEMI_VERSION', '1.2.0');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
 require_once __DIR__ . '/classes/SudemiClient.php';
 require_once __DIR__ . '/classes/SudemiPairing.php';
 require_once __DIR__ . '/classes/SudemiQueue.php';
+require_once __DIR__ . '/classes/SudemiShipping.php';
 require_once __DIR__ . '/classes/SudemiSync.php';
 require_once __DIR__ . '/classes/SudemiOrders.php';
 require_once __DIR__ . '/classes/SudemiHeartbeat.php';
@@ -56,7 +57,10 @@ class Sudemi extends Module
             // Dispatch and delivery, reported back so sudemi can tell the buyer. Hooked to the
             // shop's own status changes rather than asking the merchant for an extra step: a
             // step that has to be remembered is a step that gets skipped.
-            && $this->registerHook('actionOrderStatusPostUpdate');
+            && $this->registerHook('actionOrderStatusPostUpdate')
+            && $this->registerHook('moduleRoutes')
+            && $this->registerHook('actionCarrierUpdate')
+            && $this->registerHook('actionObjectCarrierUpdateAfter');
     }
 
     public function uninstall()
@@ -140,6 +144,34 @@ class Sudemi extends Module
         SudemiOrders::report($order, $event);
     }
 
+    /**
+     * The ownership challenge lives at a fixed path, /.well-known/sudemi-challenge, which
+     * PrestaShop's dispatcher only reaches through a route (friendly URLs on). Without this the
+     * path answered 404 and no PrestaShop shop could ever finish pairing.
+     */
+    public function hookModuleRoutes($params)
+    {
+        return [
+            'module-sudemi-challenge' => [
+                'controller' => 'challenge',
+                'rule' => '.well-known/sudemi-challenge',
+                'keywords' => [],
+                'params' => ['fc' => 'module', 'module' => 'sudemi', 'controller' => 'challenge'],
+            ],
+        ];
+    }
+
+    /** Shipping prices come from the carriers: a change there re-sends the catalogue on the next heartbeat. */
+    public function hookActionCarrierUpdate($params)
+    {
+        Configuration::updateValue('SUDEMI_RESYNC_DUE', 1);
+    }
+
+    public function hookActionObjectCarrierUpdateAfter($params)
+    {
+        Configuration::updateValue('SUDEMI_RESYNC_DUE', 1);
+    }
+
     public function hookActionAdminControllerSetMedia()
     {
         if (!SudemiClient::isConnected() || !SudemiHeartbeat::isDue()) {
@@ -187,6 +219,18 @@ class Sudemi extends Module
             }
         }
 
+        if (Tools::isSubmit('sudemi_delivery')) {
+            $output .= $this->guard('sudemi_delivery');
+            if ($output === '') {
+                SudemiShipping::saveDays(Tools::getValue('handling_days'), Tools::getValue('transit_days'));
+                SudemiShipping::saveCarriers((array) Tools::getValue('sudemi_carriers', []));
+                // Every product carries the times, so the catalogue is sent again.
+                $output .= SudemiSync::runFull()
+                    ? $this->displayConfirmation($this->l('Delivery times saved and the catalogue sent.'))
+                    : $this->displayWarning($this->l('Delivery times saved. The catalogue will be sent with the next sync.'));
+            }
+        }
+
         if (Tools::isSubmit('sudemi_disconnect')) {
             $output .= $this->guard('sudemi_disconnect');
             if ($output === '') {
@@ -221,6 +265,18 @@ class Sudemi extends Module
         return Tools::getAdminTokenLite('AdminModules') . '|' . $this->name;
     }
 
+    /** Shipping prices as sudemi buyers will see them, for the first active product. */
+    private function shippingPreview()
+    {
+        $id = (int) Db::getInstance()->getValue('SELECT id_product FROM ' . _DB_PREFIX_ . 'product WHERE active = 1 AND is_virtual = 0 ORDER BY id_product');
+        if (!$id) {
+            return [];
+        }
+        $product = new Product($id, false, (int) Configuration::get('PS_LANG_DEFAULT'));
+
+        return SudemiShipping::preview($product, Product::getPriceStatic($id, true));
+    }
+
     private function renderScreen()
     {
         $connected = SudemiClient::isConnected();
@@ -241,6 +297,11 @@ class Sudemi extends Module
                 ['token' => SudemiHeartbeat::cronToken()],
                 true
             ),
+            'sudemi_handling_days' => SudemiShipping::handlingDays(),
+            'sudemi_transit_days' => SudemiShipping::transitDays(),
+            'sudemi_shipping_preview' => $this->shippingPreview(),
+            'sudemi_carriers' => SudemiShipping::activeCarriers(),
+            'sudemi_chosen_carriers' => SudemiShipping::chosenCarriers(),
             'sudemi_supported' => $supported,
             'sudemi_claim_url' => $claimUrl,
             'sudemi_shop_url' => SudemiPairing::shopUrl(),
