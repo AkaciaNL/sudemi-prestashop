@@ -535,7 +535,7 @@ class SudemiOrders
         $message = is_array($response) && isset($response['body']['message']) ? (string) $response['body']['message']
             : (is_array($response) ? (string) $response['status'] : 'sudemi could not be reached');
         SudemiLogger::error('Order ' . $order->reference . ': sudemi did not refund this (' . $message
-            . '). The buyer has NOT been paid back; contact sudemi support.');
+            . '). The buyer has NOT been paid back; contact sudemi support (support@sudemi.com).');
     }
 
     /** @param Order $order */
