@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.1');
+define('SUDEMI_VERSION', '1.2.2');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -22,6 +22,7 @@ require_once __DIR__ . '/classes/SudemiClient.php';
 require_once __DIR__ . '/classes/SudemiPairing.php';
 require_once __DIR__ . '/classes/SudemiQueue.php';
 require_once __DIR__ . '/classes/SudemiShipping.php';
+require_once __DIR__ . '/classes/SudemiWithdrawal.php';
 require_once __DIR__ . '/classes/SudemiSync.php';
 require_once __DIR__ . '/classes/SudemiOrders.php';
 require_once __DIR__ . '/classes/SudemiHeartbeat.php';
@@ -61,7 +62,20 @@ class Sudemi extends Module
             && $this->registerHook('moduleRoutes')
             && $this->registerHook('actionOrderSlipAdd')
             && $this->registerHook('actionCarrierUpdate')
-            && $this->registerHook('actionObjectCarrierUpdateAfter');
+            && $this->registerHook('actionObjectCarrierUpdateAfter')
+            && SudemiWithdrawal::installTable()
+            && $this->registerWithdrawalHooks();
+    }
+
+    /**
+     * The right-of-withdrawal field on the product page (PrestaShop 8.1+/9 product form) and its
+     * save. Shared with upgrade-1.2.2.php, which registers them on existing installs.
+     */
+    public function registerWithdrawalHooks()
+    {
+        return $this->registerHook('actionProductFormBuilderModifier')
+            && $this->registerHook('actionAfterUpdateProductFormHandler')
+            && $this->registerHook('actionProductDelete');
     }
 
     public function uninstall()
@@ -74,6 +88,7 @@ class Sudemi extends Module
         SudemiKeys::forget();
         SudemiPairing::forget();
         SudemiOrders::uninstallTable();
+        SudemiWithdrawal::uninstallTable();
         SudemiLogger::clear();
         SudemiHeartbeat::forget();
         // Price changes that never got through go with the credential that would have signed
@@ -90,6 +105,85 @@ class Sudemi extends Module
         if (!empty($params['id_product'])) {
             SudemiSync::pushDelta((int) $params['id_product']);
         }
+    }
+
+    /**
+     * The right-of-withdrawal choice on the product page: a select in the Options tab of the
+     * product form (PrestaShop 8.1+ / 9). Combinations carry their product's setting.
+     */
+    public function hookActionProductFormBuilderModifier($params)
+    {
+        if (empty($params['form_builder'])) {
+            return;
+        }
+        $builder = $params['form_builder'];
+        $tab = null;
+        foreach (['options', 'shipping', 'description'] as $candidate) {
+            if ($builder->has($candidate)) {
+                $tab = $builder->get($candidate);
+                break;
+            }
+        }
+        if ($tab === null) {
+            return;
+        }
+        $current = !empty($params['id']) ? SudemiWithdrawal::get((int) $params['id']) : null;
+        $choices = [];
+        foreach ($this->withdrawalLabels() as $value => $label) {
+            $choices[$label] = $value;
+        }
+        $tab->add(SudemiWithdrawal::FIELD, \Symfony\Component\Form\Extension\Core\Type\ChoiceType::class, [
+            'label' => $this->l('Right of withdrawal'),
+            'help' => $this->l('Only for products that legally fall under an exception. Buyers see it before paying; misuse is not allowed.'),
+            'choices' => $choices,
+            'data' => $current !== null ? $current : SudemiWithdrawal::NONE,
+            'required' => false,
+            'placeholder' => false,
+            'translation_domain' => false,
+            'choice_translation_domain' => false,
+        ]);
+    }
+
+    /**
+     * Saves the choice after PrestaShop has saved the product (the form's own permission and
+     * CSRF checks have passed by then). A changed exclusion is sent with a full sync on the next
+     * heartbeat: the price push that follows every save carries price and stock only.
+     */
+    public function hookActionAfterUpdateProductFormHandler($params)
+    {
+        $productId = isset($params['id']) ? (int) $params['id'] : 0;
+        $data = isset($params['form_data']) && is_array($params['form_data']) ? $params['form_data'] : [];
+        foreach ($data as $tab) {
+            if (is_array($tab) && array_key_exists(SudemiWithdrawal::FIELD, $tab)) {
+                if (SudemiWithdrawal::set($productId, $tab[SudemiWithdrawal::FIELD])) {
+                    Configuration::updateValue('SUDEMI_RESYNC_DUE', 1);
+                }
+
+                return;
+            }
+        }
+    }
+
+    public function hookActionProductDelete($params)
+    {
+        if (!empty($params['id_product'])) {
+            SudemiWithdrawal::forget((int) $params['id_product']);
+        }
+    }
+
+    /** reason => label, in the employee's language. */
+    private function withdrawalLabels()
+    {
+        return [
+            SudemiWithdrawal::NONE => $this->l('None — normal right of withdrawal applies'),
+            'hygiene' => $this->l('Sealed for health or hygiene reasons (not returnable once unsealed)'),
+            'custom' => $this->l('Made to the buyer’s specifications or personalised'),
+            'perishable' => $this->l('Perishable or quickly expiring'),
+            'media' => $this->l('Sealed audio, video or software (not returnable once unsealed)'),
+            'press' => $this->l('Newspaper, periodical or magazine'),
+            'mixed' => $this->l('Inseparably mixed with other items after delivery'),
+            'alcohol' => $this->l('Alcohol with a market-dependent price, delivered after 30+ days'),
+        ];
     }
 
     public function hookActionUpdateQuantity($params)

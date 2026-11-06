@@ -265,7 +265,7 @@ class SudemiSync
 
         $categories = array_map('strval', $product->getCategories());
 
-        return [
+        $payload = [
             'externalId' => (string) $product->id,
             'sku' => (string) $product->reference,
             'gtin' => ((string) $product->ean13) !== '' ? (string) $product->ean13 : (((string) $product->upc) !== '' ? (string) $product->upc : null),
@@ -287,6 +287,10 @@ class SudemiSync
             'maxTransitTimeDays' => SudemiShipping::transitDays(),
             'brand' => $product->id_manufacturer ? (string) Manufacturer::getNameById((int) $product->id_manufacturer) : null,
         ];
+
+        // Excluded from the right of withdrawal (EU 2011/83 art. 16), with the reason; omitted when
+        // the normal right applies. Combinations are built from this payload, so they inherit it.
+        return SudemiWithdrawal::apply($payload, SudemiWithdrawal::get($productId));
     }
 
     /** Money in minor units: a float price is a rounding error waiting for a checkout. */
