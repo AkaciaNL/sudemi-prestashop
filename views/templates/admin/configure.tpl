@@ -21,7 +21,7 @@
         <th style="width:14rem">{l s='Shop address' mod='sudemi'}</th>
         <td>
           <code>{$sudemi_shop_url|escape:'html':'UTF-8'}</code>
-          <p class="help-block">{l s='Fixed. sudemi checked that this shop answered from this address, and a listing tells a buyer where it came from — so changing it means connecting again from the new address.' mod='sudemi'}</p>
+          <p class="help-block">{l s='Fixed. sudemi checked that this shop answered from this address, and a listing tells a buyer where it came from - so changing it means connecting again from the new address.' mod='sudemi'}</p>
         </td>
       </tr>
       <tr>
@@ -42,7 +42,7 @@
 
     {* Whether sudemi is showing this shop's products, in sudemi's own words.
        Worth its own panel because the failure it reports is invisible from here: products stop
-       being listed when the beats stop arriving, and from this side everything looks normal —
+       being listed when the beats stop arriving, and from this side everything looks normal
        module active, catalogue intact, settings right. The cause is usually no cron entry on
        the host, and without this the first sign of it is a seller wondering where the orders
        went. *}
@@ -169,7 +169,7 @@
     </form>
 
   {else}
-    <p>{l s='Connecting this shop lets an AI assistant find your products and send buyers to you. You confirm the connection on sudemi, signed in to your own account — this module never asks for your sudemi password.' mod='sudemi'}</p>
+    <p>{l s='Connecting this shop lets an AI assistant find your products and send buyers to you. You confirm the connection on sudemi, signed in to your own account - this module never asks for your sudemi password.' mod='sudemi'}</p>
     <form method="post" action="{$sudemi_action|escape:'html':'UTF-8'}">
       <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
       <button type="submit" name="sudemi_connect" class="btn btn-primary" {if !$sudemi_supported}disabled{/if}>
@@ -204,7 +204,7 @@
 
     {if $sudemi_support.ticket}
       {assign var=t value=$sudemi_support.ticket}
-      <h4 id="sudemi-ticket">{$t.number|escape:'html':'UTF-8'} — {$t.subject|escape:'html':'UTF-8'}</h4>
+      <h4 id="sudemi-ticket">{$t.number|escape:'html':'UTF-8'} - {$t.subject|escape:'html':'UTF-8'}</h4>
       <p><span class="label label-default">{$t.category|escape:'html':'UTF-8'}</span>
         <span class="label {if $t.closed}label-default{else}label-info{/if}">{$t.status|escape:'html':'UTF-8'}</span>
         <a href="{$sudemi_support.list_url|escape:'html':'UTF-8'}" style="margin-left:1em">{$sl.back|escape:'html':'UTF-8'}</a></p>

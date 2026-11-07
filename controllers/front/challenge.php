@@ -2,7 +2,7 @@
 /**
  * Serves the ownership challenge.
  *
- * This is what proves to sudemi that whoever started the pairing controls this shop — the only
+ * This is what proves to sudemi that whoever started the pairing controls this shop - the only
  * thing between a stranger typing someone else's domain and listing products under their name.
  * It answers with the token and nothing else: no theme, no HTML, no redirect.
  *

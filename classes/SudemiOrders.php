@@ -2,14 +2,14 @@
 /**
  * Answering sudemi's question: can this shop actually fulfil the order?
  *
- * Nobody but this shop can answer it. sudemi holds no stock — it carries a figure this module
+ * Nobody but this shop can answer it. sudemi holds no stock - it carries a figure this module
  * pushed, which was true when it was pushed and may not be now, because the same units are on
  * sale in this storefront at the same time. So sudemi does not decide. It authorises the buyer's
  * card, holds the money without taking it, and asks.
  *
  * Until this module answers, nothing has been charged. Yes captures the money and splits it; no
  * releases the hold; saying nothing releases it too once the window closes. Silence is never
- * taken as agreement — a shop that has stopped answering is usually a shop that is gone.
+ * taken as agreement - a shop that has stopped answering is usually a shop that is gone.
  */
 class SudemiOrders
 {
@@ -158,7 +158,7 @@ class SudemiOrders
         }
 
         // Refused: the window closed, or the authorisation lapsed before this shop answered. No
-        // money was taken, so the local order must not survive — and the stock it reserved has to
+        // money was taken, so the local order must not survive - and the stock it reserved has to
         // go back, or this shop slowly loses inventory to orders that never happened.
         $reason = isset($body['message']) ? (string) $body['message'] : sprintf('HTTP %d', $status);
         // PrestaShop puts the stock back itself when an order moves to Canceled.

@@ -3,7 +3,7 @@
  * The entry point this shop's own cron calls, every five minutes.
  *
  * PrestaShop has no scheduler of its own, so the beat has to come from somewhere: either the
- * host's crontab calling this URL, or — as a fallback for shops with no cron at all — a
+ * host's crontab calling this URL, or - as a fallback for shops with no cron at all - a
  * back-office page load. Both end up here.
  *
  * It is reachable without a session, which is why it carries a token. Without one, a stranger

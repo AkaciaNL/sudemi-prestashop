@@ -87,7 +87,7 @@ class Sudemi extends Module
     public function uninstall()
     {
         // A signing key left on a shop that believes it has removed the module is a credential
-        // nobody is watching, so it goes — and sudemi is told, best effort.
+        // nobody is watching, so it goes - and sudemi is told, best effort.
         if (SudemiClient::isConnected()) {
             SudemiClient::postSigned('/integration/v1/credentials/revoke', ['reason' => 'uninstalled']);
         }
@@ -181,7 +181,7 @@ class Sudemi extends Module
     private function withdrawalLabels()
     {
         return [
-            SudemiWithdrawal::NONE => $this->l('None — normal right of withdrawal applies'),
+            SudemiWithdrawal::NONE => $this->l('None - normal right of withdrawal applies'),
             'hygiene' => $this->l('Sealed for health or hygiene reasons (not returnable once unsealed)'),
             'custom' => $this->l('Made to the buyer’s specifications or personalised'),
             'perishable' => $this->l('Perishable or quickly expiring'),
@@ -206,8 +206,8 @@ class Sudemi extends Module
      * The fallback beat, for a shop whose host has no cron entry for us.
      *
      * Every back-office page load asks whether a beat is due, and sends one if it is. It is not
-     * the supported path — a shop nobody logs into would go quiet and have its listings paused,
-     * correctly — but it means the common case of "installed the module, never set up cron"
+     * the supported path - a shop nobody logs into would go quiet and have its listings paused,
+     * correctly - but it means the common case of "installed the module, never set up cron"
      * keeps working instead of silently failing a week later.
      *
      * Guarded by the interval so one admin session does not send a beat per page, and never
@@ -663,10 +663,10 @@ class Sudemi extends Module
         }
         $body = $response['body'];
         $labels = [
-            'AWAITING_SELLER' => $this->l('Waiting for you — buyer not charged'),
-            'ACCEPTED' => $this->l('Accepted — waiting for the other shops in the buyer\'s payment; buyer not charged yet, do not ship'),
+            'AWAITING_SELLER' => $this->l('Waiting for you - buyer not charged'),
+            'ACCEPTED' => $this->l('Accepted - waiting for the other shops in the buyer\'s payment; buyer not charged yet, do not ship'),
             'PAID' => $this->l('Confirmed and charged'),
-            'DECLINED' => $this->l('Declined — nothing charged'),
+            'DECLINED' => $this->l('Declined - nothing charged'),
             'SHIPPED' => $this->l('Shipped'),
             'DELIVERED' => $this->l('Delivered'),
             'CANCELLED' => $this->l('Cancelled'),
@@ -688,7 +688,7 @@ class Sudemi extends Module
                 'net' => number_format((isset($order['your_net_minor']) ? (int) $order['your_net_minor'] : 0) / 100, 2)
                     . ' ' . (isset($order['currency_code']) ? (string) $order['currency_code'] : 'EUR'),
                 // Only present once sudemi has released it, which is only after this shop confirmed.
-                'customer' => isset($order['customer_name']) ? (string) $order['customer_name'] : '—',
+                'customer' => isset($order['customer_name']) ? (string) $order['customer_name'] : ' - ',
             ];
         }
         $awaiting = isset($body['counts']['AWAITING_SELLER']) ? (int) $body['counts']['AWAITING_SELLER'] : 0;

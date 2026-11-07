@@ -4,7 +4,7 @@
  *
  * sudemi cannot call this shop: it sits behind this host's firewall and accepts no connection
  * from outside. So everything starts here, which makes this the only two-way channel the
- * integration has — the request says what this shop believes its catalogue to be, and the reply
+ * integration has - the request says what this shop believes its catalogue to be, and the reply
  * is where sudemi asks for whatever it needs.
  *
  * Why it exists: from sudemi's side a shop with nothing to report and a shop whose server died
@@ -13,8 +13,8 @@
  * orders at them. So this shop says so, and sudemi stops listing it when it stops saying so.
  * The listings return on the next beat; nothing is deleted.
  *
- * The revision catches the quiet failure. A delta push can be lost — sudemi restarting, a DNS
- * blip, a proxy — and liveness notices nothing, because the shop is healthy and the beats keep
+ * The revision catches the quiet failure. A delta push can be lost - sudemi restarting, a DNS
+ * blip, a proxy - and liveness notices nothing, because the shop is healthy and the beats keep
  * arriving. Stating what this catalogue is lets sudemi disagree, and a disagreement costs one
  * full sync instead of weeks of a wrong price.
  *
@@ -166,9 +166,9 @@ class SudemiHeartbeat
      * A cheap statement of what this catalogue is.
      *
      * Product count, newest modification date and a local change counter, hashed. It does not
-     * have to describe the catalogue — only to change whenever the catalogue does, so sudemi's
+     * have to describe the catalogue - only to change whenever the catalogue does, so sudemi's
      * copy of it can disagree. All three are needed: the count alone misses an edited price, the
-     * date alone misses a deletion, and neither reliably moves for a stock change — which is why
+     * date alone misses a deletion, and neither reliably moves for a stock change - which is why
      * the counter, bumped by the save hook itself, is there.
      */
     public static function revision()
