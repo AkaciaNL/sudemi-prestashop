@@ -125,3 +125,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_faa5cafd538b3863212189efad275deb'] = 'Tüm 
 $_MODULE['<{sudemi}prestashop>sudemi_4a955738c8ee8eef877fe4a822f44325'] = 'sudemi destek';
 $_MODULE['<{sudemi}prestashop>sudemi_cae8d14edd025e72c59dbab6f378c95a'] = 'Siz';
 $_MODULE['<{sudemi}prestashop>sudemi_de4b1cecc667ead15d10a66bdca03923'] = 'Bu talep kapalı. Bir yanıt onu yeniden açar.';
+$_MODULE['<{sudemi}prestashop>sudemi_1bd983391f0e9675405614baf1ed990c'] = 'sudemi bu siteden gelen istekleri reddetti: bu mağaza sudemi\'ye farklı bir adresle bağlı (%s). Bu site bir test (staging) kopyası veya geri yüklenmiş bir yedekse, sudemi bağlantısını burada kesin. Mağaza bu adrese taşındıysa yeniden bağlayın.';
+$_MODULE['<{sudemi}prestashop>sudemi_ce1ed32e41d97b80d80b33148f53f789'] = 'sudemi bu siteden gelen istekleri reddetti: bu mağaza sudemi\'ye farklı bir adresle bağlı. Bu site bir test (staging) kopyası veya geri yüklenmiş bir yedekse, sudemi bağlantısını burada kesin. Mağaza bu adrese taşındıysa yeniden bağlayın.';

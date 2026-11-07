@@ -125,3 +125,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_faa5cafd538b3863212189efad275deb'] = 'Terug
 $_MODULE['<{sudemi}prestashop>sudemi_4a955738c8ee8eef877fe4a822f44325'] = 'sudemi-support';
 $_MODULE['<{sudemi}prestashop>sudemi_cae8d14edd025e72c59dbab6f378c95a'] = 'Jij';
 $_MODULE['<{sudemi}prestashop>sudemi_de4b1cecc667ead15d10a66bdca03923'] = 'Dit ticket is gesloten. Een reactie opent het opnieuw.';
+$_MODULE['<{sudemi}prestashop>sudemi_1bd983391f0e9675405614baf1ed990c'] = 'sudemi weigert verzoeken van deze site: deze winkel is onder een ander adres aan sudemi gekoppeld (%s). Is deze site een testkopie (staging) of een teruggezette back-up, ontkoppel sudemi dan hier. Is de winkel naar dit adres verhuisd, koppel hem dan opnieuw.';
+$_MODULE['<{sudemi}prestashop>sudemi_ce1ed32e41d97b80d80b33148f53f789'] = 'sudemi weigert verzoeken van deze site: deze winkel is onder een ander adres aan sudemi gekoppeld. Is deze site een testkopie (staging) of een teruggezette back-up, ontkoppel sudemi dan hier. Is de winkel naar dit adres verhuisd, koppel hem dan opnieuw.';

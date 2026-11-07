@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.4
+
+- Every signed call now says which site it comes from: the `Sudemi-Site` header, the shop's own
+  base URL (the address pairing announced). It is not part of the signature. A staging copy or a
+  restored backup of the shop holds the same install id and key, and sudemi now refuses its calls
+  (409 `site_mismatch`), so a copy can no longer push its catalogue or answer orders as the live
+  shop.
+- When sudemi refuses this site because the shop is connected under another address, the module
+  page shows it as not connected and says what to do: if this site is a staging copy or a
+  restored backup, disconnect sudemi there; if the shop moved, connect it again. The support
+  section says the same instead of a generic error. All 12 languages.
+- `upgrade/upgrade-1.2.4.php`: nothing to migrate.
+
 ## 1.2.3
 
 - New **Support** section on the module page (only while the shop is connected): this shop's

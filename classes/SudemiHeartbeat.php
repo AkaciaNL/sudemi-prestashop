@@ -78,6 +78,23 @@ class SudemiHeartbeat
             return true;
         }
 
+        $paired = SudemiClient::siteMismatch($response);
+        if ($paired !== null) {
+            // This site holds the shop's install id and key but is not the shop sudemi knows: a
+            // staging copy, a restored backup, or the shop moved. Refused on purpose, so retrying
+            // cannot help. The module page words it in the employee's language (problem/paired).
+            self::remember([
+                'reachable' => true,
+                'connected' => false,
+                'problem' => 'site_mismatch',
+                'paired' => $paired,
+                'message' => 'sudemi refused requests from this site: this shop is connected to sudemi under a different address.',
+                'checked' => time(),
+            ]);
+
+            return true;
+        }
+
         if ($response['status'] !== 200) {
             self::remember([
                 'reachable' => true,

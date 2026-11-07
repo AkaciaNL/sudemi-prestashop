@@ -111,6 +111,8 @@ $cases = array(
 	array( answer( 500, array() ), SudemiSupport::ERR_FAILED ),
 	array( answer( 401, array( 'error' => 'bad_signature' ) ), SudemiSupport::ERR_FAILED ),
 	array( null, SudemiSupport::ERR_UNREACHABLE ),
+	array( answer( 409, array( 'error' => 'site_mismatch', 'message' => 'This shop is connected to sudemi as https://shop.example.com, but ...' ) ), SudemiSupport::ERR_SITE ),
+	array( answer( 409, array( 'error' => 'conflict' ) ), SudemiSupport::ERR_FAILED ),
 	array( answer( 201, array( 'ticket' => array( 'id' => 'not-a-uuid' ) ) ), SudemiSupport::ERR_FAILED ),
 	array( answer( 201, array() ), SudemiSupport::ERR_FAILED ),
 );

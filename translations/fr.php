@@ -125,3 +125,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_faa5cafd538b3863212189efad275deb'] = 'Retou
 $_MODULE['<{sudemi}prestashop>sudemi_4a955738c8ee8eef877fe4a822f44325'] = 'Support sudemi';
 $_MODULE['<{sudemi}prestashop>sudemi_cae8d14edd025e72c59dbab6f378c95a'] = 'Vous';
 $_MODULE['<{sudemi}prestashop>sudemi_de4b1cecc667ead15d10a66bdca03923'] = 'Ce ticket est fermé. Une réponse le rouvre.';
+$_MODULE['<{sudemi}prestashop>sudemi_1bd983391f0e9675405614baf1ed990c'] = 'sudemi a refusé les requêtes de ce site : cette boutique est connectée à sudemi sous une autre adresse (%s). Si ce site est une copie de préproduction (staging) ou une sauvegarde restaurée, déconnectez sudemi ici. Si la boutique a été déplacée vers cette adresse, connectez-la à nouveau.';
+$_MODULE['<{sudemi}prestashop>sudemi_ce1ed32e41d97b80d80b33148f53f789'] = 'sudemi a refusé les requêtes de ce site : cette boutique est connectée à sudemi sous une autre adresse. Si ce site est une copie de préproduction (staging) ou une sauvegarde restaurée, déconnectez sudemi ici. Si la boutique a été déplacée vers cette adresse, connectez-la à nouveau.';

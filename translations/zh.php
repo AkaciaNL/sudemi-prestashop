@@ -125,3 +125,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_faa5cafd538b3863212189efad275deb'] = '返�
 $_MODULE['<{sudemi}prestashop>sudemi_4a955738c8ee8eef877fe4a822f44325'] = 'sudemi 支持';
 $_MODULE['<{sudemi}prestashop>sudemi_cae8d14edd025e72c59dbab6f378c95a'] = '您';
 $_MODULE['<{sudemi}prestashop>sudemi_de4b1cecc667ead15d10a66bdca03923'] = '该工单已关闭。回复后将重新打开。';
+$_MODULE['<{sudemi}prestashop>sudemi_1bd983391f0e9675405614baf1ed990c'] = 'sudemi 拒绝了来自此网站的请求：此店铺以另一个地址（%s）连接到 sudemi。如果此网站是测试副本（staging）或恢复的备份，请在此断开 sudemi 连接。如果店铺已迁移到此地址，请重新连接。';
+$_MODULE['<{sudemi}prestashop>sudemi_ce1ed32e41d97b80d80b33148f53f789'] = 'sudemi 拒绝了来自此网站的请求：此店铺以另一个地址连接到 sudemi。如果此网站是测试副本（staging）或恢复的备份，请在此断开 sudemi 连接。如果店铺已迁移到此地址，请重新连接。';

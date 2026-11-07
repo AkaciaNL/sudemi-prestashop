@@ -125,3 +125,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_faa5cafd538b3863212189efad275deb'] = 'На�
 $_MODULE['<{sudemi}prestashop>sudemi_4a955738c8ee8eef877fe4a822f44325'] = 'Поддержка sudemi';
 $_MODULE['<{sudemi}prestashop>sudemi_cae8d14edd025e72c59dbab6f378c95a'] = 'Вы';
 $_MODULE['<{sudemi}prestashop>sudemi_de4b1cecc667ead15d10a66bdca03923'] = 'Это обращение закрыто. Ответ откроет его снова.';
+$_MODULE['<{sudemi}prestashop>sudemi_1bd983391f0e9675405614baf1ed990c'] = 'sudemi отклонил запросы с этого сайта: этот магазин подключён к sudemi под другим адресом (%s). Если этот сайт является тестовой копией (staging) или восстановленной резервной копией, отключите sudemi здесь. Если магазин переехал на этот адрес, подключите его заново.';
+$_MODULE['<{sudemi}prestashop>sudemi_ce1ed32e41d97b80d80b33148f53f789'] = 'sudemi отклонил запросы с этого сайта: этот магазин подключён к sudemi под другим адресом. Если этот сайт является тестовой копией (staging) или восстановленной резервной копией, отключите sudemi здесь. Если магазин переехал на этот адрес, подключите его заново.';

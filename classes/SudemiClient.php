@@ -118,6 +118,78 @@ class SudemiClient
     }
 
     /**
+     * The headers that make a call signed, or null when this shop cannot sign (not connected).
+     *
+     * The signature covers the method, the path, the timestamp, a nonce and the body hash.
+     * Sudemi-Site is sent beside it, unsigned: the address this shop believes it lives at. A
+     * staging copy or a restored backup holds this shop's install id and key, and this is how
+     * sudemi tells it apart from the live shop and refuses it (409 site_mismatch).
+     *
+     * @return string[]|null
+     */
+    public static function signedHeaders($method, $path, $json)
+    {
+        $installId = self::installId();
+        if ($installId === null) {
+            return null;
+        }
+        $timestamp = (string) time();
+        $nonce = bin2hex(random_bytes(16));
+        $canonical = implode("\n", [$method, $path, $timestamp, $nonce, hash('sha256', $json)]);
+        $signature = SudemiKeys::sign($canonical);
+        if ($signature === null) {
+            return null;
+        }
+        $headers = [
+            'Sudemi-Install: ' . $installId,
+            'Sudemi-Timestamp: ' . $timestamp,
+            'Sudemi-Nonce: ' . $nonce,
+            'Sudemi-Signature: ' . $signature,
+        ];
+        $site = self::siteUrl();
+        if ($site !== '') {
+            $headers[] = 'Sudemi-Site: ' . $site;
+        }
+
+        return $headers;
+    }
+
+    /** This shop's own base URL, the same address pairing announced. '' when it cannot be told. */
+    public static function siteUrl()
+    {
+        try {
+            $url = (string) SudemiPairing::shopUrl();
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        // A header value: no line breaks, whatever the shop's settings hold.
+        return trim(preg_replace('/[\r\n]+/', '', $url));
+    }
+
+    /**
+     * Whether sudemi refused a call because it came from another site than the connected shop.
+     *
+     * @param array|null $response as request() returns it
+     *
+     * @return string|null null when it did not; otherwise the address the shop is connected
+     *                     under, as sudemi named it, or '' when it could not be read
+     */
+    public static function siteMismatch($response)
+    {
+        if (!is_array($response) || (int) $response['status'] !== 409
+            || !isset($response['body']['error']) || $response['body']['error'] !== 'site_mismatch') {
+            return null;
+        }
+        $message = isset($response['body']['message']) ? (string) $response['body']['message'] : '';
+        if (preg_match('#connected to sudemi as (https?://[A-Za-z0-9.:\[\]-]+)#', $message, $match)) {
+            return rtrim($match[1], '.:');
+        }
+
+        return '';
+    }
+
+    /**
      * @return array{status:int,body:array}|null null when the call could not be made at all
      */
     private static function request($path, array $body, $signed, $method = 'POST')
@@ -134,21 +206,11 @@ class SudemiClient
         $headers = ['Content-Type: application/json'];
 
         if ($signed) {
-            $installId = self::installId();
-            if ($installId === null) {
+            $signedHeaders = self::signedHeaders($method, $path, $json);
+            if ($signedHeaders === null) {
                 return null;
             }
-            $timestamp = (string) time();
-            $nonce = bin2hex(random_bytes(16));
-            $canonical = implode("\n", [$method, $path, $timestamp, $nonce, hash('sha256', $json)]);
-            $signature = SudemiKeys::sign($canonical);
-            if ($signature === null) {
-                return null;
-            }
-            $headers[] = 'Sudemi-Install: ' . $installId;
-            $headers[] = 'Sudemi-Timestamp: ' . $timestamp;
-            $headers[] = 'Sudemi-Nonce: ' . $nonce;
-            $headers[] = 'Sudemi-Signature: ' . $signature;
+            $headers = array_merge($headers, $signedHeaders);
         }
 
         $curl = curl_init(self::apiBase() . $path);

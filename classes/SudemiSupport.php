@@ -42,6 +42,7 @@ class SudemiSupport
     const ERR_TOO_MANY = 'too_many';
     const ERR_UNREACHABLE = 'unreachable';
     const ERR_FAILED = 'failed';
+    const ERR_SITE = 'site_mismatch';
 
     /** A ticket id as it goes into a path: a UUID and nothing else. */
     public static function isTicketId($id)
@@ -134,6 +135,10 @@ class SudemiSupport
         }
         if ($status === 429) {
             return self::ERR_TOO_MANY;
+        }
+        // This site is not the connected shop (a staging copy, a restored backup, a moved shop).
+        if ($status === 409 && isset($response['body']['error']) && $response['body']['error'] === 'site_mismatch') {
+            return self::ERR_SITE;
         }
 
         return self::ERR_FAILED;

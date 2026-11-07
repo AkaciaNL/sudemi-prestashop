@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.3');
+define('SUDEMI_VERSION', '1.2.4');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -487,6 +487,7 @@ class Sudemi extends Module
             SudemiSupport::ERR_NOT_FOUND => $this->l('That ticket was not found for this shop.'),
             SudemiSupport::ERR_TOO_MANY => $this->l('Too many tickets at once: at most 20 open tickets, and 10 new tickets per hour. Reply to an existing ticket, or try again later.'),
             SudemiSupport::ERR_UNREACHABLE => $this->l('Could not reach sudemi just now. Nothing was sent; try again shortly.'),
+            SudemiSupport::ERR_SITE => $this->siteMismatchMessage(''),
         ];
 
         return isset($messages[$kind]) ? $messages[$kind] : $this->l('sudemi could not handle this just now. Try again shortly.');
@@ -720,6 +721,19 @@ class Sudemi extends Module
         return SudemiShipping::preview($product, Product::getPriceStatic($id, true));
     }
 
+    /** sudemi refused this site as not being the connected shop: what it means and what to do. */
+    private function siteMismatchMessage($paired)
+    {
+        if ($paired !== '') {
+            return sprintf(
+                $this->l('sudemi refused requests from this site: this shop is connected to sudemi under a different address (%s). If this site is a staging copy or a restored backup, disconnect sudemi here. If the shop has moved to this address, connect it again.'),
+                $paired
+            );
+        }
+
+        return $this->l('sudemi refused requests from this site: this shop is connected to sudemi under a different address. If this site is a staging copy or a restored backup, disconnect sudemi here. If the shop has moved to this address, connect it again.');
+    }
+
     private function renderScreen()
     {
         $connected = SudemiClient::isConnected();
@@ -727,6 +741,9 @@ class Sudemi extends Module
         $supported = SudemiKeys::isSupported();
 
         $status = SudemiHeartbeat::status();
+        if (is_array($status) && isset($status['problem']) && $status['problem'] === 'site_mismatch') {
+            $status['message'] = $this->siteMismatchMessage(isset($status['paired']) ? (string) $status['paired'] : '');
+        }
 
         $this->context->smarty->assign([
             'sudemi_history_error' => $this->l('Could not reach sudemi to load the order history just now. Nothing is wrong with the orders themselves; try again shortly.'),

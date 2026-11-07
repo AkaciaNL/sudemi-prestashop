@@ -125,3 +125,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_faa5cafd538b3863212189efad275deb'] = 'חז�
 $_MODULE['<{sudemi}prestashop>sudemi_4a955738c8ee8eef877fe4a822f44325'] = 'התמיכה של sudemi';
 $_MODULE['<{sudemi}prestashop>sudemi_cae8d14edd025e72c59dbab6f378c95a'] = 'את/ה';
 $_MODULE['<{sudemi}prestashop>sudemi_de4b1cecc667ead15d10a66bdca03923'] = 'הפנייה סגורה. תשובה תפתח אותה מחדש.';
+$_MODULE['<{sudemi}prestashop>sudemi_1bd983391f0e9675405614baf1ed990c'] = 'sudemi דחה בקשות מהאתר הזה: החנות הזו מחוברת ל-sudemi בכתובת אחרת (%s). אם האתר הזה הוא עותק בדיקות (staging) או גיבוי משוחזר, יש לנתק את sudemi כאן. אם החנות עברה לכתובת הזו, יש לחבר אותה מחדש.';
+$_MODULE['<{sudemi}prestashop>sudemi_ce1ed32e41d97b80d80b33148f53f789'] = 'sudemi דחה בקשות מהאתר הזה: החנות הזו מחוברת ל-sudemi בכתובת אחרת. אם האתר הזה הוא עותק בדיקות (staging) או גיבוי משוחזר, יש לנתק את sudemi כאן. אם החנות עברה לכתובת הזו, יש לחבר אותה מחדש.';

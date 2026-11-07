@@ -125,3 +125,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_faa5cafd538b3863212189efad275deb'] = 'ال�
 $_MODULE['<{sudemi}prestashop>sudemi_4a955738c8ee8eef877fe4a822f44325'] = 'دعم sudemi';
 $_MODULE['<{sudemi}prestashop>sudemi_cae8d14edd025e72c59dbab6f378c95a'] = 'أنت';
 $_MODULE['<{sudemi}prestashop>sudemi_de4b1cecc667ead15d10a66bdca03923'] = 'هذه التذكرة مغلقة. أي رد يعيد فتحها.';
+$_MODULE['<{sudemi}prestashop>sudemi_1bd983391f0e9675405614baf1ed990c'] = 'رفض sudemi الطلبات القادمة من هذا الموقع: هذا المتجر مربوط بـ sudemi بعنوان آخر (%s). إذا كان هذا الموقع نسخة تجريبية (staging) أو نسخة احتياطية مستعادة، فافصل sudemi هنا. وإذا انتقل المتجر إلى هذا العنوان، فاربطه من جديد.';
+$_MODULE['<{sudemi}prestashop>sudemi_ce1ed32e41d97b80d80b33148f53f789'] = 'رفض sudemi الطلبات القادمة من هذا الموقع: هذا المتجر مربوط بـ sudemi بعنوان آخر. إذا كان هذا الموقع نسخة تجريبية (staging) أو نسخة احتياطية مستعادة، فافصل sudemi هنا. وإذا انتقل المتجر إلى هذا العنوان، فاربطه من جديد.';
