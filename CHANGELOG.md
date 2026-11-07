@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.3
+
+- New **Support** section on the module page (only while the shop is connected): this shop's
+  tickets with sudemi support (number, subject, status, last update), a form to open a ticket
+  (category, subject, message, optional sudemi order -- the full sudemi order id or the
+  PrestaShop order ID of a sudemi order), each ticket's conversation, and a reply form. A reply
+  reopens a closed ticket. Calls go to `/integration/v1/support/tickets`, signed with the shop's
+  key like every other call; the employee's back-office language is passed so sudemi answers in
+  it (en, nl, tr, de, fr, es, it, pl, ru, zh, ar, he). The module sends no e-mail itself: sudemi
+  mails the shop's contact address when support answers. All 12 languages.
+- `upgrade/upgrade-1.2.3.php`: nothing to migrate.
+
 ## 1.2.2
 
 - New per-product setting on the product page (Options tab): **Right of withdrawal**. For

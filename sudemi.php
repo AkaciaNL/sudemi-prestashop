@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.2');
+define('SUDEMI_VERSION', '1.2.3');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -26,9 +26,15 @@ require_once __DIR__ . '/classes/SudemiWithdrawal.php';
 require_once __DIR__ . '/classes/SudemiSync.php';
 require_once __DIR__ . '/classes/SudemiOrders.php';
 require_once __DIR__ . '/classes/SudemiHeartbeat.php';
+require_once __DIR__ . '/classes/SudemiSupport.php';
 
 class Sudemi extends Module
 {
+    /** The ticket to show in the Support section after an action (created or replied to). */
+    private $supportTicket;
+
+    /** Set once a ticket or reply went through, so the form is shown empty again. */
+    private $supportSent = false;
     public function __construct()
     {
         $this->name = 'sudemi';
@@ -378,7 +384,250 @@ class Sudemi extends Module
             }
         }
 
+        if (Tools::isSubmit('sudemi_support_create')) {
+            $output .= $this->guard('sudemi_support_create');
+            if ($output === '') {
+                $output .= $this->supportCreate();
+            }
+        }
+
+        if (Tools::isSubmit('sudemi_support_reply')) {
+            $output .= $this->guard('sudemi_support_reply');
+            if ($output === '') {
+                $output .= $this->supportReply();
+            }
+        }
+
         return $output . $this->renderScreen();
+    }
+
+    /** Opens a ticket from the form. The form's values are kept on a failure, so nothing typed is lost. */
+    private function supportCreate()
+    {
+        if (!SudemiClient::isConnected()) {
+            return $this->displayError($this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'));
+        }
+        $orderInput = trim((string) Tools::getValue('sudemi_support_order'));
+        $orderId = $this->resolveSudemiOrder($orderInput);
+        if ($orderInput !== '' && $orderId === null) {
+            return $this->displayError($this->supportError(SudemiSupport::ERR_ORDER));
+        }
+        $result = SudemiSupport::createTicket(
+            Tools::getValue('sudemi_support_category'),
+            Tools::getValue('sudemi_support_subject'),
+            Tools::getValue('sudemi_support_message'),
+            $orderId,
+            $this->employeeLocale()
+        );
+        if (!$result['ok']) {
+            return $this->displayError($this->supportError($result['error']));
+        }
+        $this->supportTicket = $result['ticket'];
+        $this->supportSent = true;
+
+        return $this->displayConfirmation(Tools::htmlentitiesUTF8(sprintf(
+            $this->l('Ticket %s was sent. sudemi support answers here and by e-mail.'),
+            isset($result['ticket']['number']) ? (string) $result['ticket']['number'] : ''
+        )));
+    }
+
+    private function supportReply()
+    {
+        if (!SudemiClient::isConnected()) {
+            return $this->displayError($this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'));
+        }
+        $result = SudemiSupport::reply((string) Tools::getValue('sudemi_ticket'), Tools::getValue('sudemi_support_reply_message'));
+        if (!$result['ok']) {
+            return $this->displayError($this->supportError($result['error']));
+        }
+        $this->supportTicket = $result['ticket'];
+        $this->supportSent = true;
+
+        return $this->displayConfirmation($this->l('Your reply was sent.'));
+    }
+
+    /**
+     * The sudemi order a ticket is about: a full sudemi order id, or the number of a PrestaShop
+     * order that came through sudemi. Null when nothing (or nothing known) was given.
+     */
+    private function resolveSudemiOrder($input)
+    {
+        if ($input === '') {
+            return null;
+        }
+        if (SudemiSupport::isTicketId($input)) {
+            return strtolower($input);
+        }
+        if (ctype_digit($input)) {
+            $id = Db::getInstance()->getValue('SELECT sudemi_order_id FROM `' . _DB_PREFIX_ . 'sudemi_order`
+                WHERE id_order = ' . (int) $input);
+
+            return is_string($id) && SudemiSupport::isTicketId($id) ? $id : null;
+        }
+
+        return null;
+    }
+
+    /** The employee's back-office language, when sudemi writes in it (it answers in English otherwise). */
+    private function employeeLocale()
+    {
+        $language = isset($this->context->language) ? $this->context->language : null;
+
+        return SudemiSupport::locale($language && isset($language->iso_code) ? $language->iso_code : null);
+    }
+
+    private function supportError($kind)
+    {
+        $messages = [
+            SudemiSupport::ERR_CATEGORY => $this->l('Choose a category.'),
+            SudemiSupport::ERR_SUBJECT => $this->l('The subject needs 3 to 200 characters.'),
+            SudemiSupport::ERR_MESSAGE => $this->l('The message cannot be empty or longer than 10,000 characters.'),
+            SudemiSupport::ERR_ORDER => $this->l('That order was not found. Give the full sudemi order id, or the PrestaShop order ID of an order that came through sudemi.'),
+            SudemiSupport::ERR_INVALID => $this->l('sudemi did not accept this. Check the subject, the message and the order, then try again.'),
+            SudemiSupport::ERR_NOT_FOUND => $this->l('That ticket was not found for this shop.'),
+            SudemiSupport::ERR_TOO_MANY => $this->l('Too many tickets at once: at most 20 open tickets, and 10 new tickets per hour. Reply to an existing ticket, or try again later.'),
+            SudemiSupport::ERR_UNREACHABLE => $this->l('Could not reach sudemi just now. Nothing was sent; try again shortly.'),
+        ];
+
+        return isset($messages[$kind]) ? $messages[$kind] : $this->l('sudemi could not handle this just now. Try again shortly.');
+    }
+
+    /** The Support section: this shop's tickets, the open-a-ticket form, and one ticket's thread. */
+    private function supportSection()
+    {
+        $categories = [
+            'ORDER' => $this->l('An order'),
+            'PAYMENT' => $this->l('A payment'),
+            'REFUND_RETURN' => $this->l('A refund or return'),
+            'ACCOUNT' => $this->l('Your sudemi account'),
+            'SHOP_PLUGIN' => $this->l('The shop connection or this module'),
+            'PAYOUTS' => $this->l('Payouts'),
+            'OTHER' => $this->l('Something else'),
+        ];
+        $statuses = [
+            'OPEN' => $this->l('Open'),
+            'WAITING_FOR_CUSTOMER' => $this->l('Waiting for your reply'),
+            'ANSWERED' => $this->l('Answered'),
+            'CLOSED' => $this->l('Closed'),
+        ];
+        $section = [
+            'labels' => [
+                'title' => $this->l('Support'),
+                'intro' => $this->l('Questions about orders, payments, payouts or this module? Open a ticket with sudemi support. Answers appear here and are also sent by e-mail to the address of your sudemi account.'),
+                'not_connected' => $this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'),
+                'list_error' => $this->l('Could not load your tickets from sudemi just now. Try again shortly.'),
+                'tickets' => $this->l('Your tickets'),
+                'empty' => $this->l('No tickets yet.'),
+                'number' => $this->l('Number'),
+                'subject' => $this->l('Subject'),
+                'status' => $this->l('Status'),
+                'updated' => $this->l('Last updated'),
+                'view' => $this->l('View'),
+                'new' => $this->l('Open a ticket'),
+                'category' => $this->l('Category'),
+                'choose' => $this->l('Choose a category'),
+                'message' => $this->l('Message'),
+                'order' => $this->l('sudemi order (optional)'),
+                'order_help' => $this->l('The full sudemi order id, or the PrestaShop order ID of an order that came through sudemi.'),
+                'send' => $this->l('Send ticket'),
+                'reply' => $this->l('Reply'),
+                'send_reply' => $this->l('Send reply'),
+                'back' => $this->l('Back to all tickets'),
+                'support' => $this->l('sudemi support'),
+                'you' => $this->l('You'),
+                'closed' => $this->l('This ticket is closed. A reply opens it again.'),
+            ],
+            'categories' => $categories,
+            'tickets' => null,
+            'ticket' => null,
+            'error' => '',
+            'form' => $this->supportSent ? ['category' => '', 'subject' => '', 'message' => '', 'order' => '', 'reply' => ''] : [
+                'category' => (string) Tools::getValue('sudemi_support_category'),
+                'subject' => (string) Tools::getValue('sudemi_support_subject'),
+                'message' => (string) Tools::getValue('sudemi_support_message'),
+                'order' => (string) Tools::getValue('sudemi_support_order'),
+                'reply' => (string) Tools::getValue('sudemi_support_reply_message'),
+            ],
+            'list_url' => $this->supportUrl(null),
+        ];
+
+        $ticket = $this->supportTicket;
+        $wanted = (string) Tools::getValue('sudemi_ticket');
+        if ($ticket === null && $wanted !== '') {
+            $loaded = SudemiSupport::getTicket($wanted);
+            if ($loaded['ok']) {
+                $ticket = $loaded['ticket'];
+            } else {
+                $section['error'] = $this->supportError($loaded['error']);
+            }
+        }
+        if ($ticket !== null) {
+            $messages = [];
+            foreach ((isset($ticket['messages']) && is_array($ticket['messages']) ? $ticket['messages'] : []) as $message) {
+                if (!is_array($message)) {
+                    continue;
+                }
+                $messages[] = [
+                    'support' => isset($message['author']) && $message['author'] === 'SUPPORT',
+                    'body' => isset($message['body']) ? (string) $message['body'] : '',
+                    'at' => $this->supportTime(isset($message['createdAt']) ? $message['createdAt'] : null),
+                ];
+            }
+            $section['ticket'] = $this->supportRow($ticket, $categories, $statuses) + ['messages' => $messages];
+        }
+
+        $list = SudemiSupport::listTickets();
+        if ($list['ok']) {
+            $section['tickets'] = [];
+            foreach ($list['tickets'] as $row) {
+                if (isset($row['id']) && SudemiSupport::isTicketId((string) $row['id'])) {
+                    $section['tickets'][] = $this->supportRow($row, $categories, $statuses);
+                }
+            }
+        }
+
+        return $section;
+    }
+
+    private function supportRow(array $ticket, array $categories, array $statuses)
+    {
+        $status = isset($ticket['status']) ? (string) $ticket['status'] : '';
+        $category = isset($ticket['category']) ? (string) $ticket['category'] : '';
+
+        return [
+            'id' => (string) $ticket['id'],
+            'number' => isset($ticket['number']) ? (string) $ticket['number'] : '',
+            'subject' => isset($ticket['subject']) ? (string) $ticket['subject'] : '',
+            'status' => isset($statuses[$status]) ? $statuses[$status] : $status,
+            'closed' => $status === 'CLOSED',
+            'category' => isset($categories[$category]) ? $categories[$category] : $category,
+            'updated' => $this->supportTime(isset($ticket['updatedAt']) ? $ticket['updatedAt'] : null),
+            'url' => $this->supportUrl((string) $ticket['id']),
+        ];
+    }
+
+    /** An ISO-8601 time from sudemi, in the shop's time zone. */
+    private function supportTime($iso)
+    {
+        $time = is_string($iso) ? strtotime($iso) : false;
+
+        return $time ? date('Y-m-d H:i', $time) : '';
+    }
+
+    /** This page's address, showing one ticket (or the list when $ticketId is null). */
+    private function supportUrl($ticketId)
+    {
+        $parts = explode('?', (string) $_SERVER['REQUEST_URI'], 2);
+        $query = [];
+        if (isset($parts[1])) {
+            parse_str($parts[1], $query);
+        }
+        unset($query['sudemi_ticket']);
+        if ($ticketId !== null) {
+            $query['sudemi_ticket'] = $ticketId;
+        }
+
+        return $parts[0] . ($query ? '?' . http_build_query($query) : '') . '#sudemi-support';
     }
 
     /** Permission, then CSRF token, on every action without exception. */
@@ -498,6 +747,9 @@ class Sudemi extends Module
             'sudemi_carriers' => SudemiShipping::activeCarriers(),
             'sudemi_chosen_carriers' => SudemiShipping::chosenCarriers(),
             'sudemi_history' => $connected ? $this->orderHistory() : null,
+            'sudemi_support' => $connected ? $this->supportSection() : null,
+            'sudemi_support_not_connected' => $this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'),
+            'sudemi_support_title' => $this->l('Support'),
             'sudemi_supported' => $supported,
             'sudemi_claim_url' => $claimUrl,
             'sudemi_shop_url' => SudemiPairing::shopUrl(),

@@ -79,6 +79,18 @@ class SudemiClient
         return self::requestWithBackoff($path, [], true, 'GET');
     }
 
+    /**
+     * One signed call, no waiting on a 429.
+     *
+     * For calls a person is waiting on in the back office (support tickets): there a 429 is an
+     * answer to show ("too many tickets"), not a reason to hold the page for minutes. The path
+     * carries any query string, which is signed with it; a GET signs the hash of an empty body.
+     */
+    public static function sendSigned($method, $path, array $body = [])
+    {
+        return self::request($path, $body, true, $method === 'GET' ? 'GET' : 'POST');
+    }
+
     private static function requestWithBackoff($path, array $body, $signed, $method = 'POST')
     {
         $attempt = 0;

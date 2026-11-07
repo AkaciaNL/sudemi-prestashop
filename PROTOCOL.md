@@ -218,6 +218,23 @@ idempotently:
 - `DECLINED`: released without charge (the capture failed or the authorisation lapsed). Cancel the local order and restore its stock.
 - Only a local order still on hold is touched; anything else was settled before.
 
+### Support tickets
+
+The shop owner can talk to sudemi support from the module page. Signed like every other call
+(a GET signs an empty body; a query string is part of the signed path):
+
+| Call | Body | Answer |
+| --- | --- | --- |
+| `GET /integration/v1/support/tickets` | – | `{"tickets": [summary]}`, newest activity first |
+| `POST /integration/v1/support/tickets` | `{category, subject, message, orderId?, locale?}` | 201 `{"ticket": detail}` |
+| `GET /integration/v1/support/tickets/{id}` | – | `{"ticket": detail}`; 404 if not this shop's |
+| `POST /integration/v1/support/tickets/{id}/messages` | `{message}` | `{"ticket": detail}`; reopens a closed ticket |
+
+`category` is one of `ORDER`, `PAYMENT`, `REFUND_RETURN`, `ACCOUNT`, `SHOP_PLUGIN`, `PAYOUTS`,
+`OTHER`; `subject` 3–200 characters, `message` 1–10 000; `locale` is the admin's two-letter
+language when sudemi has it. 400 is an invalid request, 429 too many tickets (20 open, 10 new
+per hour). Message bodies are plain text and are shown escaped. The plugin sends no e-mail.
+
 ## 5. What a plugin may **not** change
 
 These are returned by `GET /integration/v1/shop` in a `locked_fields` array, and every plugin
