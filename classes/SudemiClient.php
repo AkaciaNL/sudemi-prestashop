@@ -196,7 +196,9 @@ class SudemiClient
     {
         // A GET carries no body, and the signature covers the hash of the body actually sent --
         // so it has to be the hash of nothing, not the hash of "{}".
-        $json = $method === 'GET' ? '' : json_encode($body);
+        // An empty body is sent as {} rather than []: an endpoint that takes an optional object
+        // refuses a JSON array.
+        $json = $method === 'GET' ? '' : ($body === [] ? '{}' : json_encode($body));
         if ($json === false) {
             SudemiLogger::warn('A payload could not be encoded.');
 

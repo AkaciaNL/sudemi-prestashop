@@ -93,6 +93,7 @@ class Db {
 
 require __DIR__ . '/../classes/SudemiClient.php';
 require __DIR__ . '/../classes/SudemiHeartbeat.php';
+require __DIR__ . '/../classes/SudemiRequests.php';
 
 Configuration::$values = array(
 	'SUDEMI_INSTALL_ID' => 'inst-1',
@@ -175,6 +176,19 @@ answer_with( 200, array( 'catalogue_listed' => true ) );
 SudemiHeartbeat::run();
 $status = SudemiHeartbeat::status();
 check( 'heartbeat: the next good beat clears it', true === $status['connected'] && ! isset( $status['problem'] ) );
+
+// ---- return requests ride on the beat: stored each 200 beat, cleared when the key is absent ----
+$open = array( array( 'request_id' => 'aaaaaaaa-1111-4222-8333-944455556666', 'order_id' => '7d9e8f00-1111-4222-8333-944455556666',
+	'kind' => 'RETURN', 'reason' => 'Too small', 'requested_at' => '2026-11-07T10:00:00Z', 'respond_by' => '2026-11-14T10:00:00Z' ) );
+answer_with( 200, array( 'catalogue_listed' => true, 'open_requests' => $open ) );
+SudemiHeartbeat::run();
+check( 'heartbeat: open_requests are stored', 1 === count( SudemiRequests::all() ) && 'Too small' === SudemiRequests::all()[0]['reason'] );
+answer_with( 500, array() );
+SudemiHeartbeat::run();
+check( 'heartbeat: a failed beat keeps the stored requests', 1 === count( SudemiRequests::all() ) );
+answer_with( 200, array( 'catalogue_listed' => true ) );
+SudemiHeartbeat::run();
+check( 'heartbeat: a 200 beat without open_requests clears them', array() === SudemiRequests::all() );
 
 // ---- the module page's wording, in all twelve languages ----
 $sources = array(

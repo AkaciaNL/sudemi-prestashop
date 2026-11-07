@@ -227,7 +227,30 @@ idempotently:
 
 - `PAID` (or `SHIPPED`/`DELIVERED`): the money is taken. Fetch the address, mark the local order paid, and ship.
 - `DECLINED`: released without charge (the capture failed or the authorisation lapsed). Cancel the local order and restore its stock.
-- Only a local order still on hold is touched; anything else was settled before.
+- `CANCELLED`: the buyer cancelled before shipping and was refunded in full (or the shop's own
+  cancel came back). Cancel the local order and restore its stock if it is not cancelled,
+  refunded or shipped here already, without sending `/cancel` or `/refund` back for it.
+- Otherwise only a local order still on hold is touched; anything else was settled before.
+
+### Return requests
+
+After delivery a buyer may ask to return an order. The heartbeat answer then carries
+`open_requests`, the **full** list on every beat (absent when there are none, so the plugin
+replaces its copy each 200 beat):
+
+```json
+"open_requests": [
+  {"request_id": "…", "order_id": "…", "kind": "RETURN", "reason": "too small",
+   "requested_at": "2026-11-07T10:00:00Z", "respond_by": "2026-11-14T10:00:00Z"}
+]
+```
+
+The shop answers by `respond_by` (7 days) with `POST /integration/v1/orders/{order_id}/request/accept`
+(body optional) or `/request/reject` with `{"reason": "..."}` (required, shown to the buyer;
+otherwise 400 `invalid_request`). 200 `{"status": "ok"}` or `{"status": "already_resolved"}`;
+404 when there is no open request. Without an answer sudemi decides. Accepting moves no money:
+the shop refunds through `/refund` once the item is back, and that refund closes the request.
+The order history (`GET /integration/v1/orders`) carries the same entry as `customer_request`.
 
 ### Support tickets
 

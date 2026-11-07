@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.4');
+define('SUDEMI_VERSION', '1.2.5');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -27,6 +27,7 @@ require_once __DIR__ . '/classes/SudemiSync.php';
 require_once __DIR__ . '/classes/SudemiOrders.php';
 require_once __DIR__ . '/classes/SudemiHeartbeat.php';
 require_once __DIR__ . '/classes/SudemiSupport.php';
+require_once __DIR__ . '/classes/SudemiRequests.php';
 
 class Sudemi extends Module
 {
@@ -70,7 +71,19 @@ class Sudemi extends Module
             && $this->registerHook('actionCarrierUpdate')
             && $this->registerHook('actionObjectCarrierUpdateAfter')
             && SudemiWithdrawal::installTable()
-            && $this->registerWithdrawalHooks();
+            && $this->registerWithdrawalHooks()
+            && $this->registerOrderPageHooks();
+    }
+
+    /**
+     * The return-request block on the back-office order page: displayAdminOrderMain on the
+     * PrestaShop 1.7.7+ order page, displayAdminOrder on the older one. Shared with
+     * upgrade-1.2.5.php, which registers them on existing installs.
+     */
+    public function registerOrderPageHooks()
+    {
+        return $this->registerHook('displayAdminOrderMain')
+            && $this->registerHook('displayAdminOrder');
     }
 
     /**
@@ -251,16 +264,29 @@ class Sudemi extends Module
                 return;
             }
         }
-        $event = null;
-        if (!empty($status->shipped)) {
-            $event = 'shipped';
-        } elseif (!empty($status->delivery)) {
-            $event = 'delivered';
-        }
+        $event = self::orderEvent((int) $status->id, !empty($status->shipped), (int) Configuration::get('PS_OS_DELIVERED'));
         if ($event === null) {
             return;
         }
         SudemiOrders::report($order, $event);
+    }
+
+    /**
+     * Which event a new order state reports: 'delivered', 'shipped' or null.
+     *
+     * Delivered is the shop's own Delivered state. PrestaShop's state flags cannot tell it apart:
+     * Shipped and Delivered both carry shipped and delivery, and "delivery" only means a delivery
+     * slip exists (Processing in progress has it too). Reading the flag reported every Delivered
+     * as another shipment, so sudemi never heard of a delivery and the buyer's 14-day return
+     * window never started.
+     */
+    public static function orderEvent($stateId, $shipped, $deliveredId)
+    {
+        if ($deliveredId > 0 && (int) $stateId === (int) $deliveredId) {
+            return 'delivered';
+        }
+
+        return $shipped ? 'shipped' : null;
     }
 
     /**
@@ -395,6 +421,14 @@ class Sudemi extends Module
             $output .= $this->guard('sudemi_support_reply');
             if ($output === '') {
                 $output .= $this->supportReply();
+            }
+        }
+
+        // A buyer's return request, answered from this page or from the order page's block.
+        foreach (['sudemi_request_accept' => true, 'sudemi_request_reject' => false] as $action => $accept) {
+            if (Tools::isSubmit($action)) {
+                $refused = $this->guard($action);
+                $output .= $refused !== '' ? $refused : $this->requestAnswer($accept);
             }
         }
 
@@ -644,6 +678,172 @@ class Sudemi extends Module
         return '';
     }
 
+    /**
+     * Sends the shop's answer to a buyer's return request (accept, or reject with a reason) and
+     * says how it went. The local order gets a line in its private note when sudemi took it.
+     */
+    private function requestAnswer($accept)
+    {
+        if (!SudemiClient::isConnected()) {
+            return $this->displayError($this->l('Connect this shop to sudemi first.'));
+        }
+        $sudemiId = strtolower(trim((string) Tools::getValue('sudemi_request_order')));
+        $reason = (string) Tools::getValue('sudemi_request_reason');
+        $result = SudemiRequests::answer($sudemiId, $accept, $reason);
+        $order = SudemiRequests::isUuid($sudemiId) ? SudemiOrders::localOrder($sudemiId) : null;
+
+        if ($result['outcome'] === SudemiRequests::OK) {
+            if ($order) {
+                SudemiOrders::privateMessage($order, $accept
+                    ? 'Return request accepted on sudemi. Refund this order once the item is back (status Refunded, or a credit slip); that refund closes the request.'
+                    : 'Return request rejected on sudemi. Reason given to the buyer: ' . trim($reason));
+            }
+            SudemiLogger::info(sprintf('Return request for sudemi order %s %s.', $sudemiId, $accept ? 'accepted' : 'rejected'));
+
+            return $this->displayConfirmation(Tools::htmlentitiesUTF8($accept
+                ? $this->l('Return accepted. The buyer is told to send the item back. Once it is back, refund this order the usual way (status Refunded, or a credit slip for part of it): the refund goes to the buyer through sudemi and closes the request.')
+                : $this->l('Return rejected. sudemi shows your reason to the buyer.')));
+        }
+
+        return $this->requestError($result['outcome']);
+    }
+
+    /** sudemi's answer to a return decision that did not go through, in the employee's language. */
+    private function requestError($outcome)
+    {
+        switch ($outcome) {
+            case SudemiRequests::ALREADY:
+                return $this->displayWarning(Tools::htmlentitiesUTF8($this->l('This return request was already answered (on sudemi, or by sudemi after the deadline). Nothing was changed.')));
+            case SudemiRequests::NOT_FOUND:
+                return $this->displayWarning(Tools::htmlentitiesUTF8($this->l('sudemi has no open return request for this order. It was removed from the list.')));
+            case SudemiRequests::REASON_REQUIRED:
+                return $this->displayError(Tools::htmlentitiesUTF8($this->l('To reject a return, give a reason. The buyer is shown it.')));
+            case SudemiRequests::INVALID:
+                return $this->displayError(Tools::htmlentitiesUTF8($this->l('sudemi did not accept this answer. A rejection needs a reason; check it and try again.')));
+            case SudemiRequests::UNREACHABLE:
+                return $this->displayError(Tools::htmlentitiesUTF8($this->l('Could not reach sudemi just now. Nothing was sent; try again shortly.')));
+            case SudemiRequests::SITE:
+                return $this->displayError(Tools::htmlentitiesUTF8($this->siteMismatchMessage('')));
+            default:
+                return $this->displayError(Tools::htmlentitiesUTF8($this->l('sudemi could not handle this just now. Try again shortly.')));
+        }
+    }
+
+    /** Labels shared by the return-request list and the order page block. */
+    private function requestLabels()
+    {
+        return [
+            'title' => $this->l('Return requests'),
+            'intro' => $this->l('Buyers asked to return these delivered orders. Answer each one before its answer-by date: accept, or reject with a reason (the buyer is shown it). Without an answer, sudemi decides. After accepting, refund the order once the item is back.'),
+            'empty' => $this->l('No open return requests.'),
+            'order' => $this->l('Order'),
+            'reason' => $this->l('Reason given by the buyer'),
+            'no_reason' => $this->l('No reason given'),
+            'requested' => $this->l('Requested on'),
+            'respond_by' => $this->l('Answer by'),
+            'accept' => $this->l('Accept return'),
+            'reject' => $this->l('Reject return'),
+            'reject_reason' => $this->l('Reason for rejecting (shown to the buyer)'),
+            'no_local' => $this->l('No PrestaShop order'),
+            'block_title' => $this->l('Return request from the buyer (sudemi)'),
+            'block_intro' => $this->l('The buyer asked to return this order. Accept, or reject with a reason (the buyer is shown it). Without an answer by the date below, sudemi decides. After accepting, refund this order once the item is back.'),
+        ];
+    }
+
+    /** One stored request, ready for the template (local order number and link, local times). */
+    private function requestRow(array $request)
+    {
+        $order = SudemiOrders::localOrder($request['order_id']);
+
+        return [
+            'order_id' => $request['order_id'],
+            'short' => Tools::substr($request['order_id'], 0, 8),
+            'local_id' => $order ? (int) $order->id : 0,
+            'reference' => $order ? (string) $order->reference : '',
+            'local_url' => $order ? $this->adminUrl('AdminOrders', ['id_order' => (int) $order->id, 'vieworder' => 1]) : '',
+            'reason' => $request['reason'],
+            'requested' => $this->supportTime($request['requested_at']),
+            'respond_by' => $this->supportTime($request['respond_by']),
+        ];
+    }
+
+    /** Where the answer forms post: this module's page, which checks permission and token. */
+    private function requestFormUrl()
+    {
+        return $this->adminUrl('AdminModules', ['configure' => $this->name]) . '#sudemi-requests';
+    }
+
+    /**
+     * A back-office link with its token. Link::getAdminLink knows the newer Symfony pages; when
+     * it cannot build one (it answers '' or throws outside a full back-office request), the
+     * legacy controller address still reaches the same page.
+     */
+    private function adminUrl($controller, array $params)
+    {
+        try {
+            $url = (string) $this->context->link->getAdminLink($controller, true, [], $params);
+        } catch (\Throwable $e) {
+            $url = '';
+        }
+        if ($url !== '') {
+            return $url;
+        }
+
+        return 'index.php?' . http_build_query(['controller' => $controller] + $params + ['token' => Tools::getAdminTokenLite($controller)]);
+    }
+
+    /** The return-request list on the module page. */
+    private function requestSection()
+    {
+        $rows = [];
+        foreach (SudemiRequests::all() as $request) {
+            $rows[] = $this->requestRow($request);
+        }
+
+        return ['labels' => $this->requestLabels(), 'rows' => $rows];
+    }
+
+    /** The order page (PrestaShop 1.7.7+): the block for this order's open return request. */
+    public function hookDisplayAdminOrderMain($params)
+    {
+        return $this->orderRequestBlock(isset($params['id_order']) ? (int) $params['id_order'] : 0);
+    }
+
+    /** The order page before PrestaShop 1.7.7 (displayAdminOrderMain covers the newer one). */
+    public function hookDisplayAdminOrder($params)
+    {
+        if (version_compare(_PS_VERSION_, '1.7.7.0', '>=')) {
+            return '';
+        }
+
+        return $this->orderRequestBlock(isset($params['id_order']) ? (int) $params['id_order'] : 0);
+    }
+
+    /** Nothing for most orders: only a sudemi order with an open return request gets a block. */
+    public function orderRequestBlock($orderId)
+    {
+        if ($orderId <= 0 || !SudemiClient::isConnected()) {
+            return '';
+        }
+        $order = new Order($orderId);
+        if (!Validate::isLoadedObject($order)) {
+            return '';
+        }
+        $sudemiId = SudemiOrders::sudemiIdOf($order);
+        $request = $sudemiId === null ? null : SudemiRequests::forOrder($sudemiId);
+        if ($request === null) {
+            return '';
+        }
+        $this->context->smarty->assign([
+            'sudemi_rq_labels' => $this->requestLabels(),
+            'sudemi_rq' => $this->requestRow($request),
+            'sudemi_rq_action' => $this->requestFormUrl(),
+            'sudemi_token' => $this->csrfToken(),
+        ]);
+
+        return $this->display(__FILE__, 'views/templates/admin/order-request.tpl');
+    }
+
     private function csrfToken()
     {
         return Tools::getAdminTokenLite('AdminModules') . '|' . $this->name;
@@ -765,6 +965,8 @@ class Sudemi extends Module
             'sudemi_chosen_carriers' => SudemiShipping::chosenCarriers(),
             'sudemi_history' => $connected ? $this->orderHistory() : null,
             'sudemi_support' => $connected ? $this->supportSection() : null,
+            'sudemi_requests' => $connected ? $this->requestSection() : null,
+            'sudemi_rq_action' => $this->requestFormUrl(),
             'sudemi_support_not_connected' => $this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'),
             'sudemi_support_title' => $this->l('Support'),
             'sudemi_supported' => $supported,

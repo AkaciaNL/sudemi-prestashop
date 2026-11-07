@@ -253,6 +253,34 @@ class SudemiOrders
     }
 
     /**
+     * Adds a line to the order's private note (the "Private note" on the order page, PrestaShop
+     * 1.7.7+; earlier versions have no such field and keep only the log line).
+     *
+     * Written straight to the column: the Order object in hand may hold a state that was just
+     * changed underneath it, and saving the whole object would put the old state back.
+     *
+     * @param Order  $order
+     * @param string $message
+     */
+    public static function privateMessage($order, $message)
+    {
+        if (!property_exists($order, 'note')) {
+            return;
+        }
+        $current = (string) Db::getInstance()->getValue('SELECT note FROM `' . _DB_PREFIX_ . 'orders` WHERE id_order = ' . (int) $order->id);
+        $line = '[sudemi ' . date('Y-m-d H:i') . '] ' . $message;
+        $note = $current === '' ? $line : $current . "\n" . $line;
+        Db::getInstance()->update('orders', ['note' => pSQL($note)], 'id_order = ' . (int) $order->id);
+        $order->note = $note;
+    }
+
+    /** The local order for a sudemi order id (null when there is none). */
+    public static function localOrder($sudemiId)
+    {
+        return self::findLocalOrder((string) $sudemiId);
+    }
+
+    /**
      * The first line this shop cannot supply, or null when it can supply all of them.
      *
      * Checked against live PrestaShop stock rather than against anything this module last
@@ -458,7 +486,55 @@ class SudemiOrders
         }
     }
 
-    /** Paid means ship it; declined means it never happened. */
+    /** The note on an order the buyer cancelled on sudemi after it was paid. */
+    const BUYER_CANCEL_NOTE = 'Cancelled by the buyer on sudemi before shipping; the buyer has been refunded in full.';
+
+    /**
+     * What one settled_orders entry asks of the local order: 'pay', 'release', 'buyer_cancel', or
+     * null (nothing to do). Pure, so it can be tested without PrestaShop.
+     *
+     * Paid and declined only touch an order still unpaid here; one already paid, shipped or
+     * cancelled was settled before (an earlier beat, or an accept that captured straight away).
+     * CANCELLED is sudemi saying the order is cancelled and the buyer refunded in full: the buyer
+     * cancelled before shipping (rule 1), or the shop's own cancel came back on the beat. Applied
+     * to any order not cancelled or refunded here yet and not shipped: a paid order left
+     * "Payment accepted" here would get packed and sent to a buyer who has their money back.
+     *
+     * @param string $status       the order's status on sudemi
+     * @param int    $current      the local order's current state id
+     * @param bool   $shipped      whether the local order has been shipped or delivered
+     * @param array  $states       ['preparation'=>id, 'canceled'=>id, 'refund'=>id, 'error'=>id]
+     *
+     * @return string|null
+     */
+    public static function settleAction($status, $current, $shipped, array $states)
+    {
+        $current = (int) $current;
+        if ($status === 'CANCELLED') {
+            $done = [(int) $states['canceled'], (int) $states['refund']];
+            if (isset($states['error'])) {
+                $done[] = (int) $states['error'];
+            }
+            if ($shipped || in_array($current, $done, true)) {
+                return null;
+            }
+
+            return 'buyer_cancel';
+        }
+        if ($current !== (int) $states['preparation']) {
+            return null;
+        }
+        if ($status === 'DECLINED') {
+            return 'release';
+        }
+        if (in_array($status, ['PAID', 'SHIPPED', 'DELIVERED'], true)) {
+            return 'pay';
+        }
+
+        return null;
+    }
+
+    /** Paid means ship it; declined means it never happened; cancelled means do not ship it. */
     private static function settle(array $settled)
     {
         $sudemiId = (string) $settled['order_id'];
@@ -467,13 +543,34 @@ class SudemiOrders
             return;
         }
         $order = self::findLocalOrder($sudemiId);
-        // Only an order still unpaid here. One already paid, shipped or cancelled was settled
-        // before -- by an earlier beat, or by an accept that captured straight away.
-        if (!$order || (int) $order->current_state !== (int) Configuration::get('PS_OS_PREPARATION')) {
+        if (!$order) {
+            return;
+        }
+        // hasBeenShipped, not hasBeenDelivered: PrestaShop's Delivered state is also flagged
+        // shipped, while "delivery" only means a delivery slip, which Processing in progress has
+        // (every sudemi order starts there), so hasBeenDelivered is true for unshipped orders.
+        $action = self::settleAction($state, (int) $order->current_state, $order->hasBeenShipped(), [
+            'preparation' => (int) Configuration::get('PS_OS_PREPARATION'),
+            'canceled' => (int) Configuration::get('PS_OS_CANCELED'),
+            'refund' => (int) Configuration::get('PS_OS_REFUND'),
+            'error' => (int) Configuration::get('PS_OS_ERROR'),
+        ]);
+        if ($action === null) {
             return;
         }
 
-        if ($state === 'DECLINED') {
+        if ($action === 'buyer_cancel') {
+            // The money is already back with the buyer (sudemi refunded it), so this only stops
+            // the shipment and restocks. setState marks the change as the module's own, so the
+            // status hook does not send a /cancel (or /refund) back to sudemi for it.
+            self::setState($order, (int) Configuration::get('PS_OS_CANCELED'));
+            self::note($order, self::BUYER_CANCEL_NOTE);
+            self::privateMessage($order, self::BUYER_CANCEL_NOTE);
+
+            return;
+        }
+
+        if ($action === 'release') {
             // Released without being charged: the capture failed, or the authorisation lapsed
             // before the last shop answered. The local order must not survive, and the stock it
             // reserved goes back.

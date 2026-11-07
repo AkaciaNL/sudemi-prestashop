@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.2.5
+
+- Buyers' **return requests**. After delivery a buyer may ask to return an order; the shop has
+  7 days to accept, or to reject with a reason the buyer is shown (without an answer, sudemi
+  decides). The open requests arrive with every heartbeat and are shown on the PrestaShop order
+  page (a block on that order) and in a new **Return requests** list on the module page: the
+  local order, the buyer's reason, the answer-by date, and Accept / Reject (a reason is required
+  to reject). Answers are signed calls to sudemi, checked for the employee's permission and the
+  CSRF token like every other action; the outcome is shown, and the order's private note gets a
+  line. After accepting, refund the order the usual way once the item is back (status Refunded,
+  or a credit slip): that refund closes the request. All 12 languages.
+- A **buyer's cancellation** of a paid, not yet shipped order now reaches the PrestaShop order:
+  when sudemi reports it cancelled (and refunded in full), the local order moves to Canceled
+  with its stock restored and a note in the order's private note, and nothing is sent back to
+  sudemi for it. Before, only an order still waiting for payment was touched, so a paid order
+  stayed "Payment accepted" and could be shipped. An order already cancelled, refunded or
+  shipped is left alone.
+- Fix: moving an order to **Delivered** now tells sudemi it was delivered. PrestaShop's Shipped
+  and Delivered states carry the same flags, so a delivery used to be reported as another
+  shipment (and Processing in progress, which has a delivery slip, could be taken for a
+  delivery). Delivered is now recognised by the shop's Delivered state itself; this is what
+  starts the buyer's 14-day return window.
+- A signed call with no body now sends `{}` instead of `[]` (an endpoint taking an optional
+  object, like accepting a return, refused the array).
+- `upgrade/upgrade-1.2.5.php` registers the order-page hooks (`displayAdminOrderMain`, and
+  `displayAdminOrder` for PrestaShop before 1.7.7).
+
 ## 1.2.4
 
 - Every signed call now says which site it comes from: the `Sudemi-Site` header, the shop's own

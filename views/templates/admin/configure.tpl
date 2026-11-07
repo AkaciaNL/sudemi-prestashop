@@ -121,6 +121,50 @@
       {/if}
     {/if}
 
+    {* Buyers' return requests (from the heartbeat). Reasons are plain text from sudemi: escaped. *}
+    {if $sudemi_requests}
+      {assign var=rql value=$sudemi_requests.labels}
+      <div id="sudemi-requests">
+        <h4>{$rql.title|escape:'html':'UTF-8'}</h4>
+        {if $sudemi_requests.rows}
+          <p class="help-block">{$rql.intro|escape:'html':'UTF-8'}</p>
+          <table class="table" id="sudemi-request-list">
+            <thead><tr>
+              <th>{$rql.order|escape:'html':'UTF-8'}</th>
+              <th>{$rql.reason|escape:'html':'UTF-8'}</th>
+              <th>{$rql.respond_by|escape:'html':'UTF-8'}</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+            {foreach from=$sudemi_requests.rows item=rq}
+              <tr>
+                <td>{if $rq.local_id}<a href="{$rq.local_url|escape:'html':'UTF-8'}">#{$rq.local_id|intval} {$rq.reference|escape:'html':'UTF-8'}</a>{else}{$rql.no_local|escape:'html':'UTF-8'}{/if}<br><small><code>{$rq.short|escape:'html':'UTF-8'}</code> {$rql.requested|escape:'html':'UTF-8'} {$rq.requested|escape:'html':'UTF-8'}</small></td>
+                <td style="white-space:pre-wrap;word-wrap:break-word">{if $rq.reason}{$rq.reason|escape:'html':'UTF-8'}{else}<em>{$rql.no_reason|escape:'html':'UTF-8'}</em>{/if}</td>
+                <td><strong>{$rq.respond_by|escape:'html':'UTF-8'}</strong></td>
+                <td>
+                  <form method="post" action="{$sudemi_rq_action|escape:'html':'UTF-8'}" style="margin-bottom:.5em">
+                    <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
+                    <input type="hidden" name="sudemi_request_order" value="{$rq.order_id|escape:'html':'UTF-8'}" />
+                    <button type="submit" name="sudemi_request_accept" class="btn btn-primary btn-sm">{$rql.accept|escape:'html':'UTF-8'}</button>
+                  </form>
+                  <form method="post" action="{$sudemi_rq_action|escape:'html':'UTF-8'}">
+                    <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
+                    <input type="hidden" name="sudemi_request_order" value="{$rq.order_id|escape:'html':'UTF-8'}" />
+                    <label style="font-weight:normal">{$rql.reject_reason|escape:'html':'UTF-8'}
+                      <textarea name="sudemi_request_reason" rows="2" maxlength="1000" required class="form-control"></textarea></label>
+                    <button type="submit" name="sudemi_request_reject" class="btn btn-default btn-sm">{$rql.reject|escape:'html':'UTF-8'}</button>
+                  </form>
+                </td>
+              </tr>
+            {/foreach}
+            </tbody>
+          </table>
+        {else}
+          <p class="help-block">{$rql.empty|escape:'html':'UTF-8'}</p>
+        {/if}
+      </div>
+    {/if}
+
     <h4>{l s='Delivery to sudemi buyers' mod='sudemi'}</h4>
     {if $sudemi_shipping_preview}
       <p>{l s='Shipping prices sent to sudemi (from your carriers; one item, your first product):' mod='sudemi'}
