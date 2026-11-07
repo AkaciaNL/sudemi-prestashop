@@ -1,0 +1,8 @@
+# Left out of the release zip (git archive, .github/workflows/release.yml): tests, CI and
+# developer documentation. Shops get the module, its changelog and the licence.
+/tests export-ignore
+/.github export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
+/PROTOCOL.md export-ignore
+/SECURITY.md export-ignore

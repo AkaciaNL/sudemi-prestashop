@@ -1,0 +1,66 @@
+name: Release
+
+# Owner decision 2026-11-07: the module stays closed source and is distributed as a GitHub release
+# of this private repository; sudemi.com/downloads serves the latest release zip to shops.
+#
+# Push a tag v<version> (for example v1.2.3). The tag must equal the module version
+# (SUDEMI_VERSION in sudemi.php) and CHANGELOG.md must have a "## <version>" entry, or the release
+# fails. The zip is what PrestaShop expects under Modules > Module Manager > Upload a module: one
+# folder sudemi/ with the module inside. Files marked export-ignore in .gitattributes (tests, CI,
+# developer docs) are left out.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches the module version
+        run: |
+          set -eu
+          v="${GITHUB_REF_NAME#v}"
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "tag $GITHUB_REF_NAME is not v<major>.<minor>.<patch>"; exit 1; }
+          module="$(sed -nE "s/^define\('SUDEMI_VERSION', '([^']+)'\);.*/\1/p" sudemi.php)"
+          echo "tag $v, SUDEMI_VERSION $module"
+          [ "$module" = "$v" ] || { echo "tag and module version differ"; exit 1; }
+          grep -Eq "^## $v( |\$)" CHANGELOG.md || { echo "CHANGELOG.md has no entry ## $v"; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sodium
+
+      - name: Lint and tests
+        run: |
+          find . -name '*.php' -print0 | xargs -0 -n1 php -l
+          for t in tests/*-test.php; do php "$t"; done
+
+      - name: Build the zip
+        run: |
+          set -eu
+          zip="sudemi-prestashop-$VERSION.zip"
+          git archive --format=zip --prefix=sudemi/ -o "$zip" HEAD
+          unzip -Z1 "$zip" > files.txt
+          grep -vq '^sudemi/' files.txt && { echo "file outside sudemi/"; exit 1; } || true
+          grep -q '^sudemi/sudemi.php$' files.txt || { echo "module main file missing"; exit 1; }
+          grep -Eq '^sudemi/(tests|\.github)/|\.git(ignore|attributes)$' files.txt && { echo "dev files in the zip"; exit 1; } || true
+          sha256sum "$zip" > "$zip.sha256"
+          cat "$zip.sha256"; ls -l "$zip"
+          echo "ZIP=$zip" >> "$GITHUB_ENV"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          awk -v v="$VERSION" '$0 ~ "^## " v "( |$)" {on=1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md
+          printf '\nInstall: PrestaShop back office, Modules > Module Manager > Upload a module, choose %s.\n' "$ZIP" >> notes.md
+          gh release create "$GITHUB_REF_NAME" "$ZIP" "$ZIP.sha256" \
+            --title "sudemi module for PrestaShop $VERSION" --notes-file notes.md --verify-tag
