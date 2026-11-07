@@ -52,6 +52,6 @@ class SudemiLogger
             // message is still truncated so a long upstream error cannot fill the row.
             'message' => Tools::substr(strip_tags((string) $message), 0, 300),
         ]);
-        Configuration::updateValue(self::CONF, json_encode(array_slice($log, 0, self::LIMIT)));
+        Configuration::updateValue(self::CONF, json_encode(array_slice($log, 0, self::LIMIT), SudemiClient::jsonFlags()));
     }
 }

@@ -40,7 +40,7 @@ class SudemiQueue
             $pending = array_slice($pending, -self::MAX_ENTRIES, null, true);
         }
 
-        Configuration::updateValue(self::CONF, json_encode($pending));
+        Configuration::updateValue(self::CONF, json_encode($pending, SudemiClient::jsonFlags()));
     }
 
     public static function all()
@@ -77,21 +77,57 @@ class SudemiQueue
             ['updates' => array_values($batch)]
         );
 
-        if (!is_array($response) || $response['status'] !== 200) {
-            // Still unreachable. Nothing is dropped and the next beat tries again.
+        $status = is_array($response) ? (int) $response['status'] : 0;
+        if ($status !== 200 && !in_array($status, self::REFUSED, true)) {
+            // Still unreachable, throttled or failing. Nothing is dropped and the next beat tries again.
             return 0;
         }
 
-        // Only what was sent is cleared: anything a save hook added while this request was in
-        // flight stays queued rather than being discarded unsent.
-        $remaining = array_diff_key(self::all(), $batch);
-        if (empty($remaining)) {
-            Configuration::deleteByName(self::CONF);
-        } else {
-            Configuration::updateValue(self::CONF, json_encode($remaining));
+        // Only what was sent is cleared, and only where it is still what was sent: a save hook
+        // that queued a newer price for the same product while this request was in flight
+        // must not see that newer price discarded unsent.
+        self::store(self::withoutSent(self::all(), $batch));
+
+        if ($status !== 200) {
+            // sudemi refused the batch itself (malformed, too large, or the shop is suspended).
+            // Sending it again would be refused again forever, so it is dropped; the change
+            // counter moves so the revision disagrees and sudemi asks for a full sync, which
+            // carries every price afresh.
+            SudemiHeartbeat::noteChange();
+            SudemiLogger::error('sudemi refused ' . count($batch) . ' queued price update(s) (HTTP ' . $status
+                . '). They were dropped; a full sync will send the current prices.');
+
+            return 0;
         }
 
         return isset($response['body']['applied']) ? (int) $response['body']['applied'] : 0;
+    }
+
+    /** Statuses that refuse a batch for good: retrying the same batch cannot succeed. */
+    const REFUSED = [400, 403, 413, 422];
+
+    /**
+     * The queue minus the entries that were sent, where they are unchanged since. Pure, so it can
+     * be tested without PrestaShop.
+     */
+    public static function withoutSent(array $current, array $sent)
+    {
+        foreach ($sent as $key => $update) {
+            if (array_key_exists($key, $current) && $current[$key] == $update) {
+                unset($current[$key]);
+            }
+        }
+
+        return $current;
+    }
+
+    private static function store(array $pending)
+    {
+        if (empty($pending)) {
+            Configuration::deleteByName(self::CONF);
+        } else {
+            Configuration::updateValue(self::CONF, json_encode($pending, SudemiClient::jsonFlags()));
+        }
     }
 
     public static function forget()

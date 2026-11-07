@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.2.6
+
+- After a full catalogue sync the module tells sudemi at once which catalogue state the sync
+  described (a heartbeat with the revision taken when the sync started). Before, sudemi adopted
+  whatever the next heartbeat reported, so a product switched off in the minutes after a sync
+  could stay listed on sudemi.
+- **Order safety: only a definite answer from sudemi decides a local order.** Before, when the
+  acceptance of an order came back as anything but "ok" (already answered, a server error, a
+  429, a 409 `site_mismatch`, sudemi unreachable halfway), the module cancelled the local order
+  and put the stock back, although the buyer might already have been charged: the order was PAID
+  on sudemi and never shipped. Now `already_resolved` is read by its `order_status` (PAID,
+  SHIPPED, DELIVERED: the order is kept and moves to Payment accepted with the address; ACCEPTED:
+  still waiting for the other shops; DECLINED: cancelled and restocked; CANCELLED/REFUNDED:
+  cancelled, do not ship), a 404 `no_such_order` releases it, and everything else (5xx, 429,
+  401, 403, any 409, unreachable) leaves the order and its stock exactly as they are and asks
+  again on the next heartbeat.
+- Every heartbeat re-checks the shop's sudemi orders still waiting for payment (lost answers,
+  orders released while sudemi could not be reached), up to 25 per beat; one still without a
+  definite answer after 3 days is closed with a reject, which also returns the final status.
+- **A locally cancelled order is never accepted again.** If the merchant cancels a sudemi order
+  that sudemi still asks about, the module now sends a reject instead of accepting it on the next
+  heartbeat.
+- **Cancelling an order that is not paid yet** (accepted while other shops in the same payment
+  still had to answer) now sends a reject, which releases the buyer's hold; before it sent a
+  cancel, which sudemi refuses before payment, so the money was taken later anyway. If the order
+  was paid meanwhile, it is cancelled with a full refund.
+- **Shipped and delivered reports that fail are retried** on the next heartbeats (for up to 14
+  days) instead of being logged as sent; a refusal is logged as an error.
+- **Full sync in batches of 500 listings.** Products with combinations are one listing per
+  combination, so a batch of 100 products could exceed sudemi's 500-per-request limit; sudemi
+  refused it and the full sync never completed. Batches are now cut at 500 listings (or the
+  smaller maximum sudemi names).
+- A sync commit that sudemi holds (it would remove a large share of the listed products) is no
+  longer logged as synced; the log says nothing was changed and what to do.
+- The price retry queue no longer drops a newer price queued for the same product while an older
+  one was being sent, and a batch sudemi refuses for good (400, 403, 413, 422) is dropped instead
+  of being re-sent forever; a full sync then carries the current prices.
+- Text that is not valid UTF-8 (an old product description) no longer makes a whole call fail;
+  invalid bytes are replaced.
+
 ## 1.2.5
 
 - Buyers' **return requests**. After delivery a buyer may ask to return an order; the shop has

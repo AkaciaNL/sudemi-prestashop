@@ -31,38 +31,47 @@ class SudemiSync
             return false;
         }
         $syncId = (string) $started['body']['sync_id'];
+        // What the catalogue was when this sync started reading it; sent right after the commit
+        // (SudemiHeartbeat::anchor) so sudemi holds the revision this sync describes.
+        $anchor = SudemiHeartbeat::revision();
 
         self::pushShop();
         self::pushCategories();
 
+        // sudemi takes at most 500 listings per request, and a product with combinations is one
+        // listing per combination: 100 products can be thousands of listings. Batching by
+        // product sent more than 500 at once, sudemi refused the whole batch, and the full sync
+        // never completed. So listings are buffered and sent 500 at a time.
+        $limit = self::listingsPerRequest($started['body']);
         $languageId = (int) Configuration::get('PS_LANG_DEFAULT');
         $page = 0;
         $sent = 0;
+        $buffer = [];
         while (true) {
             $products = Product::getProducts($languageId, $page * self::BATCH_SIZE, self::BATCH_SIZE, 'id_product', 'ASC', false, true);
             if (empty($products)) {
                 break;
             }
-            $payload = [];
             foreach ($products as $row) {
                 foreach (self::listings((int) $row['id_product'], $languageId) as $item) {
-                    $payload[] = $item;
+                    $buffer[] = $item;
                 }
             }
-            if (!empty($payload)) {
-                $result = SudemiClient::postSigned('/integration/v1/products', [
-                    'syncId' => $syncId,
-                    'products' => $payload,
-                ]);
-                if ($result === null || $result['status'] !== 200) {
-                    // Abandon rather than commit. An uncommitted sync delists nothing.
-                    SudemiLogger::warn('A batch failed; the sync was abandoned and nothing was delisted.');
-
+            list($batches, $buffer) = self::chunkListings($buffer, $limit, false);
+            foreach ($batches as $batch) {
+                if (!self::sendBatch($syncId, $batch)) {
                     return false;
                 }
-                $sent += count($payload);
+                $sent += count($batch);
             }
             ++$page;
+        }
+        list($batches) = self::chunkListings($buffer, $limit, true);
+        foreach ($batches as $batch) {
+            if (!self::sendBatch($syncId, $batch)) {
+                return false;
+            }
+            $sent += count($batch);
         }
 
         $committed = SudemiClient::postSigned('/integration/v1/sync/' . rawurlencode($syncId) . '/commit', []);
@@ -71,8 +80,73 @@ class SudemiSync
 
             return false;
         }
+        if (isset($committed['body']['status']) && $committed['body']['status'] === 'held') {
+            // sudemi does not apply a commit that would delist a large share of the live
+            // catalogue. Nothing was changed, so this is not a completed sync.
+            $body = $committed['body'];
+            SudemiLogger::warn('The catalogue sync is on hold: it would remove '
+                . (isset($body['would_delist']) ? (int) $body['would_delist'] : 0) . ' of '
+                . (isset($body['live_products']) ? (int) $body['live_products'] : 0)
+                . ' listed products from sudemi, so nothing was changed. If those products really were removed from this shop, contact sudemi support (support@sudemi.com).');
 
+            return false;
+        }
+
+        SudemiHeartbeat::anchor($anchor);
         SudemiLogger::info('Synced ' . $sent . ' products.');
+
+        return true;
+    }
+
+    /** The most listings one /products request may carry. */
+    const MAX_LISTINGS_PER_REQUEST = 500;
+
+    /** The batch size: 500, or less when sudemi's /sync answer names a smaller maximum. */
+    public static function listingsPerRequest($syncAnswer)
+    {
+        $limit = self::MAX_LISTINGS_PER_REQUEST;
+        if (is_array($syncAnswer) && isset($syncAnswer['max_products_per_request'])) {
+            $max = (int) $syncAnswer['max_products_per_request'];
+            if ($max > 0 && $max < $limit) {
+                $limit = $max;
+            }
+        }
+
+        return $limit;
+    }
+
+    /**
+     * Full batches of at most $limit listings, plus what is left over ([batches, rest]). With
+     * $final the rest is sent too. Pure, so it can be tested without PrestaShop.
+     */
+    public static function chunkListings(array $buffer, $limit, $final)
+    {
+        $limit = max(1, (int) $limit);
+        $batches = [];
+        while (count($buffer) >= $limit) {
+            $batches[] = array_slice($buffer, 0, $limit);
+            $buffer = array_slice($buffer, $limit);
+        }
+        if ($final && !empty($buffer)) {
+            $batches[] = $buffer;
+            $buffer = [];
+        }
+
+        return [$batches, $buffer];
+    }
+
+    private static function sendBatch($syncId, array $batch)
+    {
+        $result = SudemiClient::postSigned('/integration/v1/products', [
+            'syncId' => $syncId,
+            'products' => $batch,
+        ]);
+        if ($result === null || $result['status'] !== 200) {
+            // Abandon rather than commit. An uncommitted sync delists nothing.
+            SudemiLogger::warn('A batch failed; the sync was abandoned and nothing was delisted.');
+
+            return false;
+        }
 
         return true;
     }

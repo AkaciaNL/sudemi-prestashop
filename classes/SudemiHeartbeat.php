@@ -145,6 +145,22 @@ class SudemiHeartbeat
             SudemiOrders::handleSettled($body['settled_orders']);
         }
 
+        // Local orders still unpaid that neither list mentioned (an acceptance whose answer was
+        // lost, an order released while sudemi could not be reached), and order calls
+        // (shipped, delivered, a reject) that did not get through before.
+        $handled = [];
+        foreach (['pending_orders', 'settled_orders'] as $list) {
+            if (!empty($body[$list]) && is_array($body[$list])) {
+                foreach ($body[$list] as $entry) {
+                    if (is_array($entry) && !empty($entry['order_id'])) {
+                        $handled[] = (string) $entry['order_id'];
+                    }
+                }
+            }
+        }
+        SudemiOrders::reconcile($handled);
+        SudemiOrders::drainCalls();
+
         // sudemi and this shop disagree about what the catalogue is, so something did not
         // arrive. A full sync is the only answer that does not involve guessing which product.
         if (!empty($body['full_sync_requested']) || Configuration::get('SUDEMI_RESYNC_DUE')) {
@@ -247,6 +263,30 @@ class SudemiHeartbeat
         Configuration::deleteByName(self::CONF_CHANGES);
         Configuration::deleteByName(self::CONF_CRON_TOKEN);
         SudemiRequests::forget();
+    }
+
+    /**
+     * Tells sudemi which catalogue revision a just-committed full sync describes.
+     *
+     * After a commit sudemi forgets the revision it held and adopts the next one it is told. If
+     * that were the next regular beat, a product switched off in the minutes between the sync
+     * and that beat would be adopted as already synced and stay listed. So the revision taken
+     * when the sync started is sent at once: anything changed since makes the next beat
+     * disagree, and sudemi asks for another sync.
+     *
+     * @param string|null $revision the revision computed before the sync read the catalogue
+     */
+    public static function anchor($revision)
+    {
+        if ($revision === null || !SudemiClient::isConnected()) {
+            return;
+        }
+        SudemiClient::postSigned('/integration/v1/heartbeat', [
+            'catalogueRevision' => $revision,
+            'productCount' => self::productCount(),
+            'intervalSeconds' => self::DEFAULT_INTERVAL,
+            'pluginVersion' => SUDEMI_VERSION,
+        ]);
     }
 
     private static function productCount()

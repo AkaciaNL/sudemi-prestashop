@@ -27,6 +27,17 @@ class SudemiClient
 
     const TIMEOUT_SECONDS = 20;
 
+    /**
+     * Test seam, never set in production: when a callable, every call goes through it as
+     * fn($method, $path, array $body, callable $send), where $send() makes the real call, and
+     * what it returns is used as the answer (null = sudemi could not be reached). The shop e2e
+     * tests use it to lose an answer or fake a 503/429 inside one PHP process; nothing outside
+     * this process can set it.
+     *
+     * @var callable|null
+     */
+    public static $interceptor = null;
+
     public static function apiBase()
     {
         $configured = Configuration::get(self::CONF_API_BASE);
@@ -194,11 +205,41 @@ class SudemiClient
      */
     private static function request($path, array $body, $signed, $method = 'POST')
     {
+        if (is_callable(self::$interceptor)) {
+            $send = function () use ($path, $body, $signed, $method) {
+                return self::send($path, $body, $signed, $method);
+            };
+
+            return call_user_func(self::$interceptor, $method, $path, $body, $send);
+        }
+
+        return self::send($path, $body, $signed, $method);
+    }
+
+    /**
+     * The JSON a body is sent as. Text that is not valid UTF-8 (an old product description, a
+     * badly imported name) is replaced by U+FFFD instead of failing the whole call.
+     *
+     * @return string|false
+     */
+    public static function encode(array $body)
+    {
+        return $body === [] ? '{}' : json_encode($body, self::jsonFlags());
+    }
+
+    /** JSON_INVALID_UTF8_SUBSTITUTE where PHP has it (7.2+). */
+    public static function jsonFlags()
+    {
+        return defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0;
+    }
+
+    private static function send($path, array $body, $signed, $method = 'POST')
+    {
         // A GET carries no body, and the signature covers the hash of the body actually sent --
         // so it has to be the hash of nothing, not the hash of "{}".
         // An empty body is sent as {} rather than []: an endpoint that takes an optional object
         // refuses a JSON array.
-        $json = $method === 'GET' ? '' : ($body === [] ? '{}' : json_encode($body));
+        $json = $method === 'GET' ? '' : self::encode($body);
         if ($json === false) {
             SudemiLogger::warn('A payload could not be encoded.');
 

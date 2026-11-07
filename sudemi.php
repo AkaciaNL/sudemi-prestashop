@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.5');
+define('SUDEMI_VERSION', '1.2.6');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -259,7 +259,13 @@ class Sudemi extends Module
                 return;
             }
             if ((int) $status->id === (int) Configuration::get('PS_OS_CANCELED')) {
-                SudemiOrders::cancel($order, 'Cancelled by the shop');
+                // Asked as a reject first, because only sudemi knows whether the money was taken:
+                // an order not paid yet (accepted while other shops in the same payment still had
+                // to answer, or the acceptance never got through) is released by /reject, while
+                // sudemi refuses /cancel for it and would take the money later. If sudemi answers
+                // that it is paid, rejectFromShop cancels it there with a full refund. (PrestaShop's
+                // own "paid" flag cannot tell: Processing in progress counts as paid.)
+                SudemiOrders::rejectFromShop($order, SudemiOrders::sudemiIdOf($order), 'Cancelled by the shop');
 
                 return;
             }
