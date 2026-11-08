@@ -163,10 +163,15 @@ class SudemiHeartbeat
 
         // sudemi and this shop disagree about what the catalogue is, so something did not
         // arrive. A full sync is the only answer that does not involve guessing which product.
-        if (!empty($body['full_sync_requested']) || Configuration::get('SUDEMI_RESYNC_DUE')) {
-            Configuration::updateValue('SUDEMI_RESYNC_DUE', 0);
-            SudemiLogger::info('sudemi asked for a full sync.');
-            SudemiSync::runFull();
+        // Asked for here, never run here: a full sync of a large catalogue takes minutes, and a
+        // beat also runs after back-office page loads. The cron entry runs it (or, without
+        // cron, small steps after back-office page loads; see SudemiSync::work). While one is
+        // already being sent, sudemi asks because it has not arrived yet: not asked again.
+        if (!empty($body['full_sync_requested']) && !SudemiSync::inProgress()) {
+            if (!Configuration::get(SudemiSync::CONF_DUE)) {
+                SudemiLogger::info('sudemi asked for a full sync.');
+            }
+            SudemiSync::request();
         }
 
         return true;

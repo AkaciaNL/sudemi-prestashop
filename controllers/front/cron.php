@@ -4,7 +4,8 @@
  *
  * PrestaShop has no scheduler of its own, so the beat has to come from somewhere: either the
  * host's crontab calling this URL, or - as a fallback for shops with no cron at all - a
- * back-office page load. Both end up here.
+ * back-office page load. Only this entry runs a full catalogue sync to the end; a page load
+ * sends at most a small step of it.
  *
  * It is reachable without a session, which is why it carries a token. Without one, a stranger
  * could trigger a full catalogue walk on this shop as often as they liked, and a cron endpoint
@@ -38,7 +39,15 @@ class SudemiCronModuleFrontController extends ModuleFrontController
             exit;
         }
 
+        // A full sync of a large catalogue outlives a short PHP time limit; where the host lets
+        // it, this run sends it to the end. Stopped anyway, it resumes where it stopped.
+        ignore_user_abort(true);
+        @set_time_limit(0);
+
         $answered = SudemiHeartbeat::run();
+        // The full sync the beat (or a carrier change, or the module page) asked for, or the
+        // rest of one that back-office page loads started.
+        SudemiSync::work();
 
         // A beat that could not reach sudemi is still a successful cron run: the shop's own
         // scheduler must not start mailing failures because a marketplace was briefly down.

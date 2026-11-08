@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.7');
+define('SUDEMI_VERSION', '1.2.8');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -72,7 +72,48 @@ class Sudemi extends Module
             && $this->registerHook('actionObjectCarrierUpdateAfter')
             && SudemiWithdrawal::installTable()
             && $this->registerWithdrawalHooks()
-            && $this->registerOrderPageHooks();
+            && $this->registerOrderPageHooks()
+            && $this->registerCombinationHooks();
+    }
+
+    /**
+     * A combination edited, added or deleted on its own (its own form in PrestaShop 8/9 does not
+     * fire actionProductUpdate). Shared with upgrade-1.2.8.php, which registers them on
+     * existing installs.
+     */
+    public function registerCombinationHooks()
+    {
+        return $this->registerHook('actionObjectCombinationAddAfter')
+            && $this->registerHook('actionObjectCombinationUpdateAfter')
+            && $this->registerHook('actionObjectCombinationDeleteAfter');
+    }
+
+    public function hookActionObjectCombinationAddAfter($params)
+    {
+        $this->combinationChanged($params, false);
+    }
+
+    public function hookActionObjectCombinationUpdateAfter($params)
+    {
+        $this->combinationChanged($params, false);
+    }
+
+    /** A deleted combination stays listed on sudemi until a full sync's commit removes it. */
+    public function hookActionObjectCombinationDeleteAfter($params)
+    {
+        $this->combinationChanged($params, true);
+    }
+
+    private function combinationChanged($params, $deleted)
+    {
+        $combination = isset($params['object']) ? $params['object'] : null;
+        if (!is_object($combination) || empty($combination->id_product)) {
+            return;
+        }
+        if ($deleted) {
+            SudemiSync::noteRemoval();
+        }
+        SudemiSync::pushDelta((int) $combination->id_product);
     }
 
     /**
@@ -176,7 +217,7 @@ class Sudemi extends Module
         foreach ($data as $tab) {
             if (is_array($tab) && array_key_exists(SudemiWithdrawal::FIELD, $tab)) {
                 if (SudemiWithdrawal::set($productId, $tab[SudemiWithdrawal::FIELD])) {
-                    Configuration::updateValue('SUDEMI_RESYNC_DUE', 1);
+                    SudemiSync::request();
                 }
 
                 return;
@@ -188,6 +229,8 @@ class Sudemi extends Module
     {
         if (!empty($params['id_product'])) {
             SudemiWithdrawal::forget((int) $params['id_product']);
+            // Its listings stay on sudemi until a full sync's commit removes them.
+            SudemiSync::noteRemoval();
         }
     }
 
@@ -216,17 +259,6 @@ class Sudemi extends Module
         }
     }
 
-    /**
-     * The fallback beat, for a shop whose host has no cron entry for us.
-     *
-     * Every back-office page load asks whether a beat is due, and sends one if it is. It is not
-     * the supported path - a shop nobody logs into would go quiet and have its listings paused,
-     * correctly - but it means the common case of "installed the module, never set up cron"
-     * keeps working instead of silently failing a week later.
-     *
-     * Guarded by the interval so one admin session does not send a beat per page, and never
-     * attached to a storefront request: a buyer's page load must not wait on our network.
-     */
     /**
      * Reports dispatch and delivery to sudemi when the merchant moves an order on.
      *
@@ -337,20 +369,33 @@ class Sudemi extends Module
     /** Shipping prices come from the carriers: a change there re-sends the catalogue on the next heartbeat. */
     public function hookActionCarrierUpdate($params)
     {
-        Configuration::updateValue('SUDEMI_RESYNC_DUE', 1);
+        SudemiSync::request();
     }
 
     public function hookActionObjectCarrierUpdateAfter($params)
     {
-        Configuration::updateValue('SUDEMI_RESYNC_DUE', 1);
+        SudemiSync::request();
     }
 
+    /**
+     * The fallback beat, for a shop whose host has no cron entry for us.
+     *
+     * A back-office page load sends a beat when one is due and a small step (at most
+     * SudemiSync::STEP_PRODUCTS products, about two seconds) of a waiting full sync, both after
+     * the page was produced (after it was sent, where PHP-FPM allows it). Never the whole sync:
+     * on a large catalogue that held the employee's screen for minutes. The cron entry runs the
+     * rest; without cron the following page loads continue where the last one stopped.
+     *
+     * Not the supported path - a shop nobody logs into would go quiet and have its listings
+     * paused, correctly - and never attached to a storefront request: a buyer's page load must
+     * not wait on our network.
+     */
     public function hookActionAdminControllerSetMedia()
     {
-        if (!SudemiClient::isConnected() || !SudemiHeartbeat::isDue()) {
+        if (!SudemiClient::isConnected() || (!SudemiHeartbeat::isDue() && !SudemiSync::pending())) {
             return;
         }
-        SudemiHeartbeat::run();
+        register_shutdown_function(['SudemiSync', 'afterResponse']);
     }
 
     /**
@@ -398,7 +443,12 @@ class Sudemi extends Module
                 SudemiShipping::saveDays(Tools::getValue('handling_days'), Tools::getValue('transit_days'));
                 SudemiShipping::saveCarriers((array) Tools::getValue('sudemi_carriers', []));
                 // Every product carries the times, so the catalogue is sent again.
-                $output .= SudemiSync::runFull()
+                $sent = SudemiSync::runFull();
+                if (!$sent) {
+                    // Still owed: the cron entry (or the next back-office pages) sends it.
+                    SudemiSync::request();
+                }
+                $output .= $sent
                     ? $this->displayConfirmation($this->l('Delivery times saved and the catalogue sent.'))
                     : $this->displayWarning($this->l('Delivery times saved. The catalogue will be sent with the next sync.'));
             }

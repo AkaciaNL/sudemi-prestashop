@@ -4,8 +4,9 @@
  *
  * A full sync walks every active product and ends with a commit, which is the only thing that
  * may delist: a sync that dies halfway is never committed, so a cron timeout cannot empty a
- * shop's listings. A delta carries one product's price or stock and runs from PrestaShop's own
- * update hooks.
+ * shop's listings. It remembers where it stopped, so the cron entry or later back-office page
+ * loads continue it (see work()). A change push carries one product's listings and runs from
+ * PrestaShop's own update hooks.
  *
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
@@ -18,74 +19,224 @@ class SudemiSync
 {
     const BATCH_SIZE = 100;
 
+    /** Set when a full sync should run (sudemi asked, carriers or delivery times changed). */
+    const CONF_DUE = 'SUDEMI_RESYNC_DUE';
+
+    /** The full sync in progress: its id, where it stopped, the revision it started from. */
+    const CONF_STATE = 'SUDEMI_SYNC_STATE';
+
+    /**
+     * Listings that stopped being listed here (a product deleted or switched off, a combination
+     * deleted), counted; and the count the last committed full sync covered. Only a full sync's
+     * commit can take a listing off sudemi, so while the two differ no push may carry the
+     * catalogue revision: sudemi would adopt it and the gone listing would stay listed.
+     */
+    const CONF_REMOVALS = 'SUDEMI_REMOVALS';
+    const CONF_REMOVALS_SYNCED = 'SUDEMI_REMOVALS_SYNCED';
+
+    /** A back-office request sends at most this many products, for at most this many seconds. */
+    const STEP_PRODUCTS = 25;
+    const STEP_SECONDS = 2;
+
+    /** sudemi drops an uncommitted sync after 6 hours; one older than this is started again. */
+    const MAX_SYNC_AGE = 19800;
+
+    /** Asks for a full sync; the cron entry (or the next back-office steps) runs it. */
+    public static function request()
+    {
+        Configuration::updateValue(self::CONF_DUE, 1);
+    }
+
+    /** Whether a full sync was started and has not finished yet. */
+    public static function inProgress()
+    {
+        return self::state() !== null;
+    }
+
+    /** Whether there is full-sync work waiting: asked for, or started and not finished. */
+    public static function pending()
+    {
+        return (bool) Configuration::get(self::CONF_DUE) || self::inProgress();
+    }
+
+    /**
+     * A whole full sync, now: for the module page's "send the catalogue" actions. Continues a
+     * sync already in progress rather than starting a second one.
+     *
+     * @return bool whether it was committed
+     */
     public static function runFull()
     {
-        if (!SudemiClient::isConnected()) {
-            return false;
+        if (!self::inProgress()) {
+            self::request();
         }
+        do {
+            $result = self::work();
+        } while ($result === 'more');
 
+        return $result === 'done';
+    }
+
+    /**
+     * Runs the full sync that is due or in progress, for at most $maxProducts products and
+     * $maxSeconds seconds (0 = until it is done), and remembers where it stopped.
+     *
+     * The cron entry runs it to the end. A back-office page load only ever runs a small bounded
+     * step after the page was sent (Sudemi::hookActionAdminControllerSetMedia): a full sync of a
+     * large catalogue inside a page load held the employee's screen for minutes. A database lock
+     * keeps two requests from sending the same sync at once.
+     *
+     * @return string 'idle' (nothing to do), 'busy' (another request is sending it), 'more'
+     *                (stopped at the limit), 'done' (committed), 'held' (sudemi held the commit)
+     *                or 'failed' (kept for a retry when sudemi did not answer)
+     */
+    public static function work($maxProducts = 0, $maxSeconds = 0)
+    {
+        if (!SudemiClient::isConnected() || !self::pending()) {
+            return 'idle';
+        }
+        if (!self::lock()) {
+            return 'busy';
+        }
+        try {
+            // Read again under the lock, from the database rather than PrestaShop's cache of it:
+            // another request may have moved it on or finished it meanwhile.
+            $state = self::state(true);
+            if ($state !== null && time() - (int) $state['started'] > self::MAX_SYNC_AGE) {
+                SudemiLogger::warn('An unfinished catalogue sync was too old and is started again.');
+                self::clearState();
+                self::request();
+                $state = null;
+            }
+            if ($state === null) {
+                if (!self::freshValue(self::CONF_DUE)) {
+                    return 'idle';
+                }
+                $state = self::start();
+                if ($state === null) {
+                    return 'failed';
+                }
+            }
+
+            return self::advance($state, (int) $maxProducts, (int) $maxSeconds);
+        } finally {
+            self::unlock();
+        }
+    }
+
+    /**
+     * Sends a bounded step of the waiting full sync after the response went to the browser,
+     * where PHP-FPM (or LiteSpeed) allows that; elsewhere the step is small enough not to matter.
+     */
+    public static function afterResponse()
+    {
+        if (function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')) {
+            while (ob_get_level() > 0 && @ob_end_flush()) {
+            }
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            } else {
+                litespeed_finish_request();
+            }
+        }
+        ignore_user_abort(true);
+        try {
+            if (SudemiHeartbeat::isDue()) {
+                SudemiHeartbeat::run();
+            }
+            self::work(self::STEP_PRODUCTS, self::STEP_SECONDS);
+        } catch (\Throwable $e) {
+            SudemiLogger::warn('Background step failed: ' . $e->getMessage());
+        }
+    }
+
+    /** Opens a sync on sudemi and sends the shop and its categories; null when sudemi refused. */
+    private static function start()
+    {
+        // Cleared first: anything asking for a sync from here on asks for another one.
+        Configuration::updateValue(self::CONF_DUE, 0);
         $started = SudemiClient::postSigned('/integration/v1/sync', []);
         if ($started === null || $started['status'] !== 200 || empty($started['body']['sync_id'])) {
             SudemiLogger::warn('Could not start a catalogue sync.');
 
-            return false;
+            return null;
         }
-        $syncId = (string) $started['body']['sync_id'];
-        // What the catalogue was when this sync started reading it; sent with the commit and in a
-        // heartbeat right after it (SudemiHeartbeat::anchor), so sudemi holds the revision this
-        // sync describes.
-        $anchor = SudemiHeartbeat::revision();
-
+        $state = [
+            'id' => (string) $started['body']['sync_id'],
+            // What the catalogue was when this sync started reading it; sent with the commit and
+            // in a heartbeat right after it (SudemiHeartbeat::anchor), so sudemi holds the
+            // revision this sync describes.
+            'anchor' => SudemiHeartbeat::revision(),
+            'removals' => self::removals(),
+            // sudemi takes at most 500 listings per request (fewer when its answer says so).
+            'limit' => self::listingsPerRequest($started['body']),
+            'cursor' => 0,
+            'sent' => 0,
+            'started' => time(),
+        ];
+        self::saveState($state);
         self::pushShop();
         self::pushCategories();
 
-        // sudemi takes at most 500 listings per request, and a product with combinations is one
-        // listing per combination: 100 products can be thousands of listings. Batching by
-        // product sent more than 500 at once, sudemi refused the whole batch, and the full sync
-        // never completed. So listings are buffered and sent 500 at a time.
-        $limit = self::listingsPerRequest($started['body']);
-        $languageId = (int) Configuration::get('PS_LANG_DEFAULT');
-        $page = 0;
-        $sent = 0;
-        $buffer = [];
-        while (true) {
-            $products = Product::getProducts($languageId, $page * self::BATCH_SIZE, self::BATCH_SIZE, 'id_product', 'ASC', false, true);
-            if (empty($products)) {
-                break;
-            }
-            foreach ($products as $row) {
-                foreach (self::listings((int) $row['id_product'], $languageId) as $item) {
-                    $buffer[] = $item;
-                }
-            }
-            list($batches, $buffer) = self::chunkListings($buffer, $limit, false);
-            foreach ($batches as $batch) {
-                if (!self::sendBatch($syncId, $batch)) {
-                    return false;
-                }
-                $sent += count($batch);
-            }
-            ++$page;
-        }
-        list($batches) = self::chunkListings($buffer, $limit, true);
-        foreach ($batches as $batch) {
-            if (!self::sendBatch($syncId, $batch)) {
-                return false;
-            }
-            $sent += count($batch);
-        }
+        return $state;
+    }
 
+    /** Sends products after the cursor, page by page, then commits; see work(). */
+    private static function advance(array $state, $maxProducts, $maxSeconds)
+    {
+        $began = microtime(true);
+        $languageId = (int) Configuration::get('PS_LANG_DEFAULT');
+        $done = 0;
+        while (true) {
+            $size = $maxProducts > 0 ? min(self::BATCH_SIZE, $maxProducts - $done) : self::BATCH_SIZE;
+            $ids = self::productIdsAfter((int) $state['cursor'], $size);
+            if (empty($ids)) {
+                return self::commit($state);
+            }
+            // A product with combinations is one listing per combination, so a page of products
+            // can be more than one request.
+            $listings = [];
+            foreach ($ids as $id) {
+                foreach (self::listings($id, $languageId) as $item) {
+                    $listings[] = $item;
+                }
+            }
+            list($batches) = self::chunkListings($listings, (int) $state['limit'], true);
+            foreach ($batches as $batch) {
+                $result = SudemiClient::postSigned('/integration/v1/products', [
+                    'syncId' => $state['id'],
+                    'products' => $batch,
+                ]);
+                if ($result === null || $result['status'] !== 200) {
+                    return self::failed($result, 'A batch failed');
+                }
+            }
+            // Moved on only once the whole page is in: a step stopped halfway sends it again,
+            // which sudemi takes as the same products once more.
+            $state['cursor'] = (int) end($ids);
+            $state['sent'] = (int) $state['sent'] + count($listings);
+            self::saveState($state);
+            $done += count($ids);
+            if (($maxProducts > 0 && $done >= $maxProducts)
+                || ($maxSeconds > 0 && microtime(true) - $began >= $maxSeconds)) {
+                return 'more';
+            }
+        }
+    }
+
+    private static function commit(array $state)
+    {
         // The commit carries the revision the sync started from: sudemi adopts it, so anything
         // changed while the sync ran makes the next heartbeat disagree and is synced next time.
+        $anchor = isset($state['anchor']) ? $state['anchor'] : null;
         $committed = SudemiClient::postSigned(
-            '/integration/v1/sync/' . rawurlencode($syncId) . '/commit',
+            '/integration/v1/sync/' . rawurlencode((string) $state['id']) . '/commit',
             $anchor === null ? [] : ['catalogueRevision' => $anchor]
         );
         if ($committed === null || $committed['status'] !== 200) {
-            SudemiLogger::warn('The catalogue was sent but the sync could not be committed.');
-
-            return false;
+            return self::failed($committed, 'The catalogue was sent but the sync could not be committed');
         }
+        self::clearState();
         if (isset($committed['body']['status']) && $committed['body']['status'] === 'held') {
             // sudemi does not apply a commit that would delist a large share of the live
             // catalogue. Nothing was changed, so this is not a completed sync.
@@ -95,13 +246,111 @@ class SudemiSync
                 . (isset($body['live_products']) ? (int) $body['live_products'] : 0)
                 . ' listed products from sudemi, so nothing was changed. If those products really were removed from this shop, contact sudemi support (support@sudemi.com).');
 
-            return false;
+            return 'held';
+        }
+        // Everything removed before the sync started is gone from sudemi now.
+        if ((int) $state['removals'] > (int) Configuration::get(self::CONF_REMOVALS_SYNCED)) {
+            Configuration::updateValue(self::CONF_REMOVALS_SYNCED, (int) $state['removals']);
         }
 
         SudemiHeartbeat::anchor($anchor);
-        SudemiLogger::info('Synced ' . $sent . ' products.');
+        SudemiLogger::info('Synced ' . (int) $state['sent'] . ' products.');
 
-        return true;
+        return 'done';
+    }
+
+    /**
+     * A request of the sync that did not get through. Unanswered, throttled or a server error:
+     * kept, and the next step sends it again. Refused (the sync expired or closed, the shop is
+     * suspended): abandoned, which delists nothing, and sudemi asks again when it needs one.
+     */
+    private static function failed($response, $what)
+    {
+        $status = is_array($response) ? (int) $response['status'] : 0;
+        if ($status === 0 || $status === 429 || $status >= 500) {
+            SudemiLogger::warn($what . '; it is retried on the next run.');
+
+            return 'failed';
+        }
+        self::clearState();
+        SudemiLogger::warn($what . ' (HTTP ' . $status . '); the sync was abandoned and nothing was delisted.');
+
+        return 'failed';
+    }
+
+    /** Ids of the active products after $after, in id order. */
+    private static function productIdsAfter($after, $limit)
+    {
+        $rows = Db::getInstance()->executeS(
+            'SELECT p.id_product FROM ' . _DB_PREFIX_ . 'product p ' . Shop::addSqlAssociation('product', 'p')
+            . ' WHERE product_shop.active = 1 AND p.id_product > ' . (int) $after
+            . ' ORDER BY p.id_product ASC LIMIT ' . max(1, (int) $limit)
+        );
+
+        return is_array($rows) ? array_map(function ($row) {
+            return (int) $row['id_product'];
+        }, $rows) : [];
+    }
+
+    private static function state($fresh = false)
+    {
+        $raw = $fresh ? self::freshValue(self::CONF_STATE) : Configuration::get(self::CONF_STATE);
+        $state = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+
+        return is_array($state) && !empty($state['id']) ? $state : null;
+    }
+
+    /** A configuration value as the database holds it now (Configuration::get is cached per request). */
+    private static function freshValue($name)
+    {
+        $value = Db::getInstance()->getValue(
+            'SELECT value FROM ' . _DB_PREFIX_ . "configuration WHERE name = '" . pSQL($name) . "' ORDER BY date_upd DESC"
+        );
+
+        return $value === false ? null : $value;
+    }
+
+    private static function saveState(array $state)
+    {
+        Configuration::updateValue(self::CONF_STATE, json_encode($state));
+    }
+
+    private static function clearState()
+    {
+        Configuration::deleteByName(self::CONF_STATE);
+    }
+
+    /** Released by MySQL itself if the request dies, so a crash never leaves it held. */
+    private static function lock()
+    {
+        return (int) Db::getInstance()->getValue("SELECT GET_LOCK('" . self::lockName() . "', 0)") === 1;
+    }
+
+    private static function unlock()
+    {
+        Db::getInstance()->getValue("SELECT RELEASE_LOCK('" . self::lockName() . "')");
+    }
+
+    private static function lockName()
+    {
+        return 'sudemi_sync_' . substr(md5(_DB_NAME_ . '|' . _DB_PREFIX_), 0, 16);
+    }
+
+    /** A listing stopped being listed here; see CONF_REMOVALS. */
+    public static function noteRemoval()
+    {
+        Configuration::updateValue(self::CONF_REMOVALS, self::removals() + 1);
+    }
+
+    private static function removals()
+    {
+        return (int) Configuration::get(self::CONF_REMOVALS);
+    }
+
+    /** Whether every listing removed here has been taken off sudemi by a committed full sync. */
+    private static function removalsSynced()
+    {
+        return self::removals() <= (int) Configuration::get(self::CONF_REMOVALS_SYNCED);
     }
 
     /** The most listings one /products request may carry. */
@@ -141,74 +390,103 @@ class SudemiSync
         return [$batches, $buffer];
     }
 
-    private static function sendBatch($syncId, array $batch)
-    {
-        $result = SudemiClient::postSigned('/integration/v1/products', [
-            'syncId' => $syncId,
-            'products' => $batch,
-        ]);
-        if ($result === null || $result['status'] !== 200) {
-            // Abandon rather than commit. An uncommitted sync delists nothing.
-            SudemiLogger::warn('A batch failed; the sync was abandoned and nothing was delisted.');
-
-            return false;
-        }
-
-        return true;
-    }
+    /** Products changed in this request, pushed once when it ends (see pushDelta). */
+    private static $changed = [];
 
     /**
-     * One product's price and stock, as they change; per combination when it has combinations
-     * (each is its own listing). Quiet on failure: a sudemi outage must not disturb the shop.
+     * A product changed (saved, its stock moved, a combination edited, added or deleted): its
+     * listings go to sudemi when this request ends. Quiet on failure: a sudemi outage must not
+     * disturb the shop.
+     *
+     * Pushed at the end of the request, once per product, rather than from each hook: saving a
+     * product with combinations fires a hook per combination and one for the product, and the
+     * catalogue revision a push carries has to be the one that holds after all of them.
      *
      * @param int $productId
-     * @param int|null $attributeId only this combination (stock moves name one), null for all
+     * @param int|null $attributeId the combination a stock move named (all are sent anyway)
      */
     public static function pushDelta($productId, $attributeId = null)
     {
-        if (!SudemiClient::isConnected()) {
+        if ((int) $productId <= 0 || !SudemiClient::isConnected()) {
             return;
         }
+        // Counted now, not after a push: the counter is what lets sudemi notice a change that
+        // never arrived, so it has to move even when the push fails or never runs.
+        SudemiHeartbeat::noteChange();
+        if (empty(self::$changed)) {
+            register_shutdown_function([__CLASS__, 'pushChanged']);
+        }
+        self::$changed[(int) $productId] = true;
+    }
+
+    /** Sends what pushDelta collected. Runs when the request ends. */
+    public static function pushChanged()
+    {
+        $ids = array_keys(self::$changed);
+        self::$changed = [];
+        foreach ($ids as $id) {
+            try {
+                self::pushProduct($id);
+            } catch (\Throwable $e) {
+                SudemiLogger::warn('A product change could not be sent: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * One product's listings: itself, or every combination. Sent whole, they can carry the
+     * catalogue revision (see pushListings). A product that has no listing any more (switched
+     * off, deleted) goes as a price push, and its removal is a full sync's job.
+     */
+    private static function pushProduct($productId)
+    {
         $languageId = (int) Configuration::get('PS_LANG_DEFAULT');
         $product = new Product((int) $productId, false, $languageId);
         if (!Validate::isLoadedObject($product)) {
+            // Deleted: nothing to send, and the listing waits for a full sync to remove it.
+            self::noteRemoval();
+
             return;
         }
 
+        try {
+            $listings = self::listings((int) $product->id, $languageId);
+            $priced = true;
+        } catch (\Throwable $e) {
+            // PrestaShop prices a full product only with an employee or a cart in the
+            // context; outside one (a script, an import) the save still sends price and stock.
+            $listings = [];
+            $priced = false;
+        }
+        if (!empty($listings)) {
+            self::pushListings($listings);
+
+            return;
+        }
+        if ($priced) {
+            // Switched off: its listings stay on sudemi until a full sync's commit removes them.
+            self::noteRemoval();
+        }
+
         $combinations = self::combinationIds($product);
-        if (empty($combinations)) {
-            // A product without combinations is one listing: sent whole, it can carry the
-            // catalogue revision (see pushListing). Inactive, it has no listing and goes as a
-            // price push below; its removal is a full sync's job, which the revision asks for.
-            try {
-                $listings = self::listings((int) $product->id, $languageId);
-            } catch (\Throwable $e) {
-                // PrestaShop prices a full product only with an employee or a cart in the
-                // context; outside one (a script, an import) the save still sends price and stock.
-                $listings = [];
-            }
-            if (count($listings) === 1) {
-                self::pushListing($listings[0]);
-
-                return;
-            }
-        }
-        $targets = empty($combinations) ? [0] : ($attributeId ? [(int) $attributeId] : $combinations);
         $updates = [];
-        foreach ($targets as $paid) {
-            $quantity = (int) StockAvailable::getQuantityAvailableByProduct((int) $product->id, $paid ?: null);
-            $updates[] = [
-                'externalId' => self::externalId((int) $product->id, $paid),
-                'priceMinor' => self::minor(Product::getPriceStatic((int) $product->id, true, $paid ?: null)),
-                'currency' => self::currency(),
-                'inStock' => $quantity > 0,
-                'quantity' => $quantity,
-            ];
+        try {
+            foreach (empty($combinations) ? [0] : $combinations as $paid) {
+                $quantity = (int) StockAvailable::getQuantityAvailableByProduct((int) $product->id, $paid ?: null);
+                $updates[] = [
+                    'externalId' => self::externalId((int) $product->id, $paid),
+                    'priceMinor' => self::minor(Product::getPriceStatic((int) $product->id, true, $paid ?: null)),
+                    'currency' => self::currency(),
+                    'inStock' => $quantity > 0,
+                    'quantity' => $quantity,
+                ];
+            }
+        } catch (\Throwable $e) {
+            // Not even a price without an employee or a cart in the context (a script, an
+            // import). The change counter moved, so the next heartbeat disagrees and sudemi asks
+            // for a full sync, which the cron entry runs with a shop context.
+            return;
         }
-
-        // Counted before the attempt, not after a success: the counter is what lets sudemi
-        // notice a change that never arrived, so it has to move even when the push fails.
-        SudemiHeartbeat::noteChange();
 
         $response = SudemiClient::postSigned('/integration/v1/products/prices', ['updates' => $updates]);
 
@@ -223,52 +501,68 @@ class SudemiSync
     }
 
     /**
-     * Sends one product's whole listing as a change push, with the catalogue revision when
-     * nothing else is waiting to be sent.
+     * Sends one product's listings (itself, or every combination) as a change push, with the
+     * catalogue revision when nothing else is waiting to be sent.
      *
      * A price push carries price and stock and nothing else, so sending the revision with it
-     * would tell sudemi a renamed product had arrived when it had not; the whole listing carries
-     * everything about the product. A product with combinations never comes here: a change to it
-     * can add or remove combinations, which a push cannot delist.
+     * would tell sudemi a renamed product had arrived when it had not; the whole listings carry
+     * everything about the product. All combinations go together: an edit of the product
+     * changes each of them.
      *
-     * The revision is computed here, after PrestaShop saved the change and after the change
-     * counter moved, exactly as the next heartbeat computes it. If every item applied, sudemi
-     * adopts it (catalogue_revision_agreed) and no full sync follows the edit. With price changes
-     * still queued it is left out: it would claim they had arrived.
+     * The revision is computed after PrestaShop saved the change and after the change counter
+     * moved, exactly as the next heartbeat computes it, and only sent when: no price change is
+     * queued, no listing removed here is still waiting for a full sync to take it off sudemi
+     * (a combination deleted, a product switched off), the category tree sudemi holds is
+     * current, and every earlier request of this push was accepted whole. If every item
+     * applied, sudemi adopts it (catalogue_revision_agreed) and no full sync follows the edit.
      */
-    private static function pushListing(array $listing)
+    private static function pushListings(array $listings)
     {
-        $update = [
+        foreach ($listings as $listing) {
+            // This push carries the product's newest state; an older queued price for it would
+            // otherwise be sent after it and put the old price back.
+            SudemiQueue::discard($listing['externalId']);
+        }
+
+        list($batches) = self::chunkListings($listings, self::MAX_LISTINGS_PER_REQUEST, true);
+        $clean = true;
+        $last = count($batches) - 1;
+        foreach ($batches as $i => $batch) {
+            $body = ['products' => $batch];
+            // A product moved into a category sudemi has not been sent would get past sudemi's
+            // category checks until a full sync, which an agreed revision makes rare. So the
+            // category tree is sent first when it changed, and without it there is no revision.
+            if ($i === $last && $clean && SudemiQueue::count() === 0 && self::removalsSynced()
+                && self::categoriesCurrent()) {
+                $revision = SudemiHeartbeat::revision();
+                if ($revision !== null) {
+                    $body['catalogueRevision'] = $revision;
+                }
+            }
+
+            $response = SudemiClient::postSigned('/integration/v1/products', $body);
+            if (!is_array($response) || $response['status'] !== 200) {
+                $clean = false;
+                foreach ($batch as $listing) {
+                    SudemiQueue::enqueue(self::priceUpdate($listing));
+                }
+                SudemiLogger::warn('A price update could not be sent; it is queued for retry.');
+            } elseif (!empty($response['body']['rejected'])) {
+                $clean = false;
+            }
+        }
+    }
+
+    /** The price-and-stock part of a listing, as the retry queue keeps it. */
+    private static function priceUpdate(array $listing)
+    {
+        return [
             'externalId' => $listing['externalId'],
             'priceMinor' => $listing['priceMinor'],
             'currency' => $listing['currency'],
             'inStock' => $listing['inStock'],
             'quantity' => $listing['quantity'],
         ];
-
-        // Counted before the attempt, not after a success: the counter is what lets sudemi
-        // notice a change that never arrived, so it has to move even when the push fails.
-        SudemiHeartbeat::noteChange();
-        // This push carries the product's newest state; an older queued price for it would
-        // otherwise be sent after it and put the old price back.
-        SudemiQueue::discard($update['externalId']);
-
-        $body = ['products' => [$listing]];
-        // A product moved into a category sudemi has not been sent would get past sudemi's
-        // category checks until a full sync, which an agreed revision makes rare. So the category
-        // tree is sent first when it changed, and without it there is no revision.
-        if (SudemiQueue::count() === 0 && self::categoriesCurrent()) {
-            $revision = SudemiHeartbeat::revision();
-            if ($revision !== null) {
-                $body['catalogueRevision'] = $revision;
-            }
-        }
-
-        $response = SudemiClient::postSigned('/integration/v1/products', $body);
-        if (!is_array($response) || $response['status'] !== 200) {
-            SudemiQueue::enqueue($update);
-            SudemiLogger::warn('A price update could not be sent; it is queued for retry.');
-        }
     }
 
     /** A hash of the category tree last sent to sudemi, so a change can be noticed. */
@@ -312,6 +606,10 @@ class SudemiSync
     public static function forget()
     {
         Configuration::deleteByName(self::CONF_CATEGORIES);
+        Configuration::deleteByName(self::CONF_STATE);
+        Configuration::deleteByName(self::CONF_DUE);
+        Configuration::deleteByName(self::CONF_REMOVALS);
+        Configuration::deleteByName(self::CONF_REMOVALS_SYNCED);
     }
 
     /** "<id_product>" or, for a combination, "<id_product>-<id_product_attribute>". */

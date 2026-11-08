@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.2.8
+
+- **A full catalogue sync never runs inside a back-office page load any more.** Before, a heartbeat
+  sent from a back-office page load (the fallback for shops without a cron entry) ran the whole
+  sync inline when sudemi asked for one, which on a large catalogue held the employee's screen for
+  minutes. Now the heartbeat only asks for the sync. The module's cron URL runs it to the end; a
+  back-office page load sends at most a small step (25 products, about two seconds) after the page
+  was produced (after it was sent, on PHP-FPM), and later page loads continue where it stopped.
+  A database lock keeps two requests from sending the sync at once; a sync stopped halfway (a time
+  limit, sudemi unreachable) resumes where it stopped; one older than 5.5 hours starts again.
+- Editing a product with combinations (the product, or one combination on its own form) sends
+  every combination's whole listing in one push, with the shop's catalogue revision computed after
+  the save, so such an edit no longer costs a full sync. New hooks for combinations edited, added
+  and deleted (registered by upgrade-1.2.8.php on existing installs).
+- The revision is sent only when no price change is queued, the category tree sudemi holds is
+  current, every request of the push was accepted whole, and no listing removed in the shop (a
+  product deleted or switched off, a combination deleted) is still waiting for a full sync to take
+  it off sudemi. Before, editing another product after such a removal could make sudemi agree with
+  the shop while the removed listing stayed listed.
+- Product changes are pushed once per product at the end of the request, instead of once per hook.
+
 ## 1.2.7
 
 - The full sync's commit carries the catalogue revision the shop had when the sync started.
