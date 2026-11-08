@@ -88,5 +88,23 @@ check( 'a newer price for the same product queued in flight survives the drain',
 check( 'the sent, unchanged entry is cleared', ! isset( $left['8'] ) );
 check( 'an entry added in flight stays', isset( $left['9'] ) );
 
+// What the buyer paid (1.2.10): the shop's order is booked at it, shipping included.
+$mug = array(
+	'total_minor'    => 1345,
+	'shipping_minor' => 495,
+	'currency_code'  => 'EUR',
+	'lines'          => array( array( 'external_id' => '14', 'quantity' => 1, 'unit_price_minor' => 850 ) ),
+);
+check( 'paid amounts read', array( 'shipping' => 495, 'lines' => array( 0 => 850 ), 'total' => 1345 ) === SudemiOrders::paidAmounts( $mug ) );
+$older = $mug;
+unset( $older['shipping_minor'] );
+check( 'older core without shipping: catalogue prices', null === SudemiOrders::paidAmounts( $older ) );
+$older = $mug;
+unset( $older['lines'][0]['unit_price_minor'] );
+check( 'older core without line prices: catalogue prices', null === SudemiOrders::paidAmounts( $older ) );
+check( 'net of 8.50 at 21% (catalogue 10.00 / 12.10)', 702 === SudemiOrders::netOf( 850, 10.0, 12.1 ) );
+check( 'net without tax is the gross', 850 === SudemiOrders::netOf( 850, 8.5, 8.5 ) );
+check( 'net with a zero price is the gross', 850 === SudemiOrders::netOf( 850, 0.0, 0.0 ) );
+
 echo $failures ? "\n$failures check(s) failed\n" : "\nall checks passed\n";
 exit( $failures ? 1 : 0 );

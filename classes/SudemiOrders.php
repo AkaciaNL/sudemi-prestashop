@@ -725,13 +725,56 @@ class SudemiOrders
             return null;
         }
 
-        foreach ($pending['lines'] as $line) {
+        // What the buyer paid, from sudemi. Null from a core that does not send it yet, and then
+        // the order is priced from the catalogue as before.
+        $paid = self::paidAmounts($pending);
+        $paidByProduct = [];
+        foreach ($pending['lines'] as $index => $line) {
             list($productId, $attributeId) = SudemiSync::parseExternalId(isset($line['external_id']) ? $line['external_id'] : '0');
             $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
             if (!$cart->updateQty($quantity, $productId, $attributeId ?: null)) {
                 $cart->delete();
                 return null;
             }
+            if ($paid !== null) {
+                $key = (int) $productId . '-' . (int) $attributeId;
+                if (!isset($paidByProduct[$key])) {
+                    $paidByProduct[$key] = 0;
+                }
+                $paidByProduct[$key] += $paid['lines'][$index] * $quantity;
+            }
+        }
+
+        $products = $cart->getProducts();
+        if ($paid !== null) {
+            // The buyer's price wins over today's catalogue price: it may have changed since the
+            // last sync, and the shop's order has to say what was actually paid. The VAT inside
+            // it is split out at the rate PrestaShop used for the cart line, never added on top.
+            $goodsIncl = 0;
+            $goodsExcl = 0;
+            foreach ($products as &$row) {
+                $key = (int) $row['id_product'] . '-' . (int) $row['id_product_attribute'];
+                $qty = max(1, (int) $row['cart_quantity']);
+                if (!isset($paidByProduct[$key])) {
+                    $cart->delete();
+                    return null;
+                }
+                $gross = $paidByProduct[$key];
+                $net = self::netOf($gross, (float) $row['price'], (float) $row['price_wt']);
+                $row['price_wt'] = round($gross / 100 / $qty, 6);
+                $row['price'] = round($net / 100 / $qty, 6);
+                $row['price_with_reduction'] = $row['price_wt'];
+                $row['price_with_reduction_without_tax'] = $row['price'];
+                $row['total_wt'] = $gross / 100;
+                $row['total'] = $net / 100;
+                $goodsIncl += $gross;
+                $goodsExcl += $net;
+            }
+            unset($row);
+            $carrier = new Carrier($carrierId);
+            $carrierRate = Configuration::get('PS_TAX') && Validate::isLoadedObject($carrier)
+                ? (float) $carrier->getTaxesRate($address) : 0.0;
+            $shippingExcl = (int) round($paid['shipping'] * 100 / (100 + $carrierRate));
         }
 
         $state = (int) Configuration::get('PS_OS_PREPARATION');
@@ -753,10 +796,23 @@ class SudemiOrders
         $order->total_paid = isset($pending['total_minor']) ? ((int) $pending['total_minor']) / 100 : 0.0;
         $order->total_paid_real = 0.0;
         $order->total_paid_tax_incl = $order->total_paid;
-        $order->total_paid_tax_excl = $order->total_paid;
-        $order->total_products = $order->total_paid;
-        $order->total_products_wt = $order->total_paid;
-        $order->total_shipping = 0.0;
+        if ($paid === null) {
+            $order->total_paid_tax_excl = $order->total_paid;
+            $order->total_products = $order->total_paid;
+            $order->total_products_wt = $order->total_paid;
+            $order->total_shipping = 0.0;
+        } else {
+            // The goods and the shipping as the buyer paid them, so the shop's books show the
+            // shipping instead of folding it into the products. The total stays total_minor.
+            $tax = ($goodsIncl - $goodsExcl) + ($paid['shipping'] - $shippingExcl);
+            $order->total_paid_tax_excl = ($paid['total'] - $tax) / 100;
+            $order->total_products = $goodsExcl / 100;
+            $order->total_products_wt = $goodsIncl / 100;
+            $order->total_shipping = $paid['shipping'] / 100;
+            $order->total_shipping_tax_incl = $paid['shipping'] / 100;
+            $order->total_shipping_tax_excl = $shippingExcl / 100;
+            $order->carrier_tax_rate = $carrierRate;
+        }
         // Awaiting payment rather than paid: an order that looks payable before the money is
         // taken is one somebody ships too early.
         $order->current_state = $state;
@@ -772,7 +828,19 @@ class SudemiOrders
         // is in flight; PrestaShop puts it back when the order is cancelled. (Taking it here by hand as
         // well, as before, would take it twice.)
         $detail = new OrderDetail();
-        $detail->createList($order, $cart, $state, $cart->getProducts());
+        $detail->createList($order, $cart, $state, $products);
+
+        if ($paid !== null) {
+            // The shipment line PrestaShop's own checkout writes: it is where the order page shows
+            // the carrier and the shipping paid, and where the merchant enters the tracking number.
+            $orderCarrier = new OrderCarrier();
+            $orderCarrier->id_order = (int) $order->id;
+            $orderCarrier->id_carrier = $carrierId;
+            $orderCarrier->weight = (float) $cart->getTotalWeight();
+            $orderCarrier->shipping_cost_tax_excl = $shippingExcl / 100;
+            $orderCarrier->shipping_cost_tax_incl = $paid['shipping'] / 100;
+            $orderCarrier->add();
+        }
 
         $history = new OrderHistory();
         $history->id_order = (int) $order->id;
@@ -782,6 +850,52 @@ class SudemiOrders
         self::remember($order->id, $sudemiId);
 
         return $order;
+    }
+
+    /**
+     * What the buyer paid for a pending order, in minor units: the shipping, each line's unit
+     * price (keyed like the lines) and the total.
+     *
+     * Null when sudemi did not send them (a core older than this module) or sent something that
+     * is not money; the order is then priced from the catalogue, as before.
+     *
+     * @param array $pending One entry of the pending_orders block
+     * @return array|null
+     */
+    public static function paidAmounts(array $pending)
+    {
+        if (!isset($pending['shipping_minor'], $pending['total_minor']) || empty($pending['lines'])
+            || !is_array($pending['lines']) || !is_numeric($pending['shipping_minor'])
+            || !is_numeric($pending['total_minor']) || (int) $pending['shipping_minor'] < 0) {
+            return null;
+        }
+        $lines = [];
+        foreach ($pending['lines'] as $index => $line) {
+            if (!is_array($line) || !isset($line['unit_price_minor']) || !is_numeric($line['unit_price_minor'])
+                || (int) $line['unit_price_minor'] < 0) {
+                return null;
+            }
+            $lines[$index] = (int) $line['unit_price_minor'];
+        }
+
+        return [
+            'shipping' => (int) $pending['shipping_minor'],
+            'lines' => $lines,
+            'total' => (int) $pending['total_minor'],
+        ];
+    }
+
+    /**
+     * The part of a gross amount without VAT, at the ratio of PrestaShop's own price without and
+     * with tax for the line. Minor units in, minor units out; never more than the gross.
+     */
+    public static function netOf($grossMinor, $priceExcl, $priceIncl)
+    {
+        if ($priceIncl <= 0 || $priceExcl <= 0 || $priceExcl >= $priceIncl) {
+            return (int) $grossMinor;
+        }
+
+        return (int) round($grossMinor * $priceExcl / $priceIncl);
     }
 
     /** One guest customer per shop owns sudemi orders until the buyer's details arrive. */

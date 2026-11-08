@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.10
+
+- **A sudemi order is booked at what the buyer paid.** Each order line gets the price the buyer
+  paid on sudemi (not the shop's current price, which may have changed since the last sync), and
+  the shipping the buyer paid is the order's shipping, with a shipment line for the carrier (where
+  the tracking number goes). Before, the products total held the whole amount, shipping included,
+  the lines had the catalogue price and the order had no shipping, so the shop's books missed the
+  shipping. The order total is still exactly what the buyer paid; the payment method is sudemi.
+- The VAT is taken out of the paid amounts (at the rate PrestaShop uses for the product and for the
+  carrier), never added on top.
+- With a sudemi core that does not send the paid amounts yet, orders are built as before.
+- PROTOCOL.md: current copy (shipping_minor and unit_price_minor on pending orders).
+
 ## 1.2.9
 
 - **No full catalogue sync inside any page request.** In 1.2.8 the module page's "Send the

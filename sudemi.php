@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.9');
+define('SUDEMI_VERSION', '1.2.10');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
