@@ -147,3 +147,4 @@ $_MODULE['<{sudemi}prestashop>sudemi_542bae99ab797aab83017257ec43eec0'] = 'Begr�
 $_MODULE['<{sudemi}prestashop>sudemi_ae1787fa8284aac1f85f50ddbc74c52c'] = 'Keine PrestaShop-Bestellung';
 $_MODULE['<{sudemi}prestashop>sudemi_a52a5941e15e2f7bdb9a5184e0a83461'] = 'Rücksendeanfrage des Käufers (sudemi)';
 $_MODULE['<{sudemi}prestashop>sudemi_79b0f6d2990d85e793870809766304aa'] = 'Der Käufer möchte diese Bestellung zurücksenden. Nehmen Sie an oder lehnen Sie mit Begründung ab (der Käufer bekommt sie zu sehen). Ohne Antwort bis zum unten genannten Datum entscheidet sudemi. Nach der Annahme erstatten Sie diese Bestellung, sobald der Artikel zurück ist.';
+$_MODULE['<{sudemi}prestashop>sudemi_e00c83de07e4077ccea2be7df460c7de'] = 'Die Katalogsynchronisierung wurde gestartet und läuft im Hintergrund; der Katalog wird innerhalb weniger Minuten gesendet.';

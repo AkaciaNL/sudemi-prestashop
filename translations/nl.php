@@ -147,3 +147,4 @@ $_MODULE['<{sudemi}prestashop>sudemi_542bae99ab797aab83017257ec43eec0'] = 'Reden
 $_MODULE['<{sudemi}prestashop>sudemi_ae1787fa8284aac1f85f50ddbc74c52c'] = 'Geen PrestaShop-bestelling';
 $_MODULE['<{sudemi}prestashop>sudemi_a52a5941e15e2f7bdb9a5184e0a83461'] = 'Retourverzoek van de koper (sudemi)';
 $_MODULE['<{sudemi}prestashop>sudemi_79b0f6d2990d85e793870809766304aa'] = 'De koper wil deze bestelling retourneren. Accepteer, of weiger met een reden (de koper krijgt die te zien). Zonder antwoord vóór de datum hieronder beslist sudemi. Na het accepteren betaal je deze bestelling terug zodra het artikel terug is.';
+$_MODULE['<{sudemi}prestashop>sudemi_e00c83de07e4077ccea2be7df460c7de'] = 'De synchronisatie van de catalogus is gestart en loopt op de achtergrond; de catalogus wordt binnen een paar minuten verstuurd.';

@@ -147,3 +147,4 @@ $_MODULE['<{sudemi}prestashop>sudemi_542bae99ab797aab83017257ec43eec0'] = 'סי�
 $_MODULE['<{sudemi}prestashop>sudemi_ae1787fa8284aac1f85f50ddbc74c52c'] = 'אין הזמנת PrestaShop';
 $_MODULE['<{sudemi}prestashop>sudemi_a52a5941e15e2f7bdb9a5184e0a83461'] = 'בקשת החזרה מהקונה (sudemi)';
 $_MODULE['<{sudemi}prestashop>sudemi_79b0f6d2990d85e793870809766304aa'] = 'הקונה מבקש להחזיר את ההזמנה הזו. אשרו, או דחו עם סיבה (הקונה יראה אותה). ללא תשובה עד התאריך שלמטה, sudemi מחליט. לאחר האישור, החזירו את הכסף על ההזמנה הזו כשהפריט חוזר.';
+$_MODULE['<{sudemi}prestashop>sudemi_e00c83de07e4077ccea2be7df460c7de'] = 'סנכרון הקטלוג התחיל ופועל ברקע; הקטלוג יישלח תוך כמה דקות.';

@@ -147,3 +147,4 @@ $_MODULE['<{sudemi}prestashop>sudemi_542bae99ab797aab83017257ec43eec0'] = 'Ret g
 $_MODULE['<{sudemi}prestashop>sudemi_ae1787fa8284aac1f85f50ddbc74c52c'] = 'PrestaShop siparişi yok';
 $_MODULE['<{sudemi}prestashop>sudemi_a52a5941e15e2f7bdb9a5184e0a83461'] = 'Alıcıdan iade talebi (sudemi)';
 $_MODULE['<{sudemi}prestashop>sudemi_79b0f6d2990d85e793870809766304aa'] = 'Alıcı bu siparişi iade etmek istiyor. Kabul edin veya bir gerekçeyle reddedin (gerekçe alıcıya gösterilir). Aşağıdaki tarihe kadar yanıt verilmezse sudemi karar verir. Kabul ettikten sonra ürün geri geldiğinde bu siparişi iade edin.';
+$_MODULE['<{sudemi}prestashop>sudemi_e00c83de07e4077ccea2be7df460c7de'] = 'Katalog senkronizasyonu başlatıldı ve arka planda çalışıyor; katalog birkaç dakika içinde gönderilir.';

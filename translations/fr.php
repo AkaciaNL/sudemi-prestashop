@@ -147,3 +147,4 @@ $_MODULE['<{sudemi}prestashop>sudemi_542bae99ab797aab83017257ec43eec0'] = 'Motif
 $_MODULE['<{sudemi}prestashop>sudemi_ae1787fa8284aac1f85f50ddbc74c52c'] = 'Pas de commande PrestaShop';
 $_MODULE['<{sudemi}prestashop>sudemi_a52a5941e15e2f7bdb9a5184e0a83461'] = 'Demande de retour de l’acheteur (sudemi)';
 $_MODULE['<{sudemi}prestashop>sudemi_79b0f6d2990d85e793870809766304aa'] = 'L’acheteur souhaite retourner cette commande. Acceptez, ou refusez avec un motif (montré à l’acheteur). Sans réponse avant la date ci-dessous, sudemi décide. Après acceptation, remboursez cette commande dès que l’article est revenu.';
+$_MODULE['<{sudemi}prestashop>sudemi_e00c83de07e4077ccea2be7df460c7de'] = 'La synchronisation du catalogue a démarré et s\'exécute en arrière-plan ; le catalogue est envoyé en quelques minutes.';

@@ -60,8 +60,9 @@ class SudemiSync
     }
 
     /**
-     * A whole full sync, now: for the module page's "send the catalogue" actions. Continues a
-     * sync already in progress rather than starting a second one.
+     * A whole full sync, now: for scripts and the command line only, never a page request (the
+     * module page's buttons only call request()). Continues a sync already in progress rather
+     * than starting a second one.
      *
      * @return bool whether it was committed
      */

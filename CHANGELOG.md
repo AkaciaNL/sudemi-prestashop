@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.9
+
+- **No full catalogue sync inside any page request.** In 1.2.8 the module page's "Send the
+  catalogue" button and saving the delivery times still ran the whole sync inside that page
+  request. Both now only ask for it ("The catalogue sync has started and runs in the background",
+  in all 12 languages); the cron URL sends it, or without cron the small steps after back-office
+  pages. Storefront pages never ran or start a full sync.
+- PROTOCOL.md: current copy (a full sync never runs inside a page request).
+
 ## 1.2.8
 
 - **A full catalogue sync never runs inside a back-office page load any more.** Before, a heartbeat

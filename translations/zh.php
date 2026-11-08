@@ -147,3 +147,4 @@ $_MODULE['<{sudemi}prestashop>sudemi_542bae99ab797aab83017257ec43eec0'] = '拒�
 $_MODULE['<{sudemi}prestashop>sudemi_ae1787fa8284aac1f85f50ddbc74c52c'] = '无 PrestaShop 订单';
 $_MODULE['<{sudemi}prestashop>sudemi_a52a5941e15e2f7bdb9a5184e0a83461'] = '买家的退货申请（sudemi）';
 $_MODULE['<{sudemi}prestashop>sudemi_79b0f6d2990d85e793870809766304aa'] = '买家希望退回此订单。请接受，或附理由拒绝（买家会看到理由）。若在下方日期前未答复，将由 sudemi 决定。接受后，请在商品寄回后为此订单退款。';
+$_MODULE['<{sudemi}prestashop>sudemi_e00c83de07e4077ccea2be7df460c7de'] = '目录同步已开始，在后台运行；目录将在几分钟内发送。';

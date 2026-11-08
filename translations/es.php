@@ -147,3 +147,4 @@ $_MODULE['<{sudemi}prestashop>sudemi_542bae99ab797aab83017257ec43eec0'] = 'Motiv
 $_MODULE['<{sudemi}prestashop>sudemi_ae1787fa8284aac1f85f50ddbc74c52c'] = 'Sin pedido de PrestaShop';
 $_MODULE['<{sudemi}prestashop>sudemi_a52a5941e15e2f7bdb9a5184e0a83461'] = 'Solicitud de devolución del comprador (sudemi)';
 $_MODULE['<{sudemi}prestashop>sudemi_79b0f6d2990d85e793870809766304aa'] = 'El comprador quiere devolver este pedido. Acepta, o rechaza con un motivo (el comprador lo verá). Sin respuesta antes de la fecha de abajo, decide sudemi. Tras aceptar, reembolsa este pedido cuando el artículo haya vuelto.';
+$_MODULE['<{sudemi}prestashop>sudemi_e00c83de07e4077ccea2be7df460c7de'] = 'La sincronización del catálogo se ha iniciado y se ejecuta en segundo plano; el catálogo se envía en unos minutos.';

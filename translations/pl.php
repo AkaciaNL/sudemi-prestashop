@@ -147,3 +147,4 @@ $_MODULE['<{sudemi}prestashop>sudemi_542bae99ab797aab83017257ec43eec0'] = 'Powó
 $_MODULE['<{sudemi}prestashop>sudemi_ae1787fa8284aac1f85f50ddbc74c52c'] = 'Brak zamówienia PrestaShop';
 $_MODULE['<{sudemi}prestashop>sudemi_a52a5941e15e2f7bdb9a5184e0a83461'] = 'Zgłoszenie zwrotu od kupującego (sudemi)';
 $_MODULE['<{sudemi}prestashop>sudemi_79b0f6d2990d85e793870809766304aa'] = 'Kupujący chce zwrócić to zamówienie. Przyjmij albo odrzuć z podaniem powodu (kupujący go zobaczy). Bez odpowiedzi do poniższej daty decyzję podejmuje sudemi. Po przyjęciu zwróć pieniądze za to zamówienie, gdy produkt wróci.';
+$_MODULE['<{sudemi}prestashop>sudemi_e00c83de07e4077ccea2be7df460c7de'] = 'Synchronizacja katalogu została uruchomiona i działa w tle; katalog zostanie wysłany w ciągu kilku minut.';

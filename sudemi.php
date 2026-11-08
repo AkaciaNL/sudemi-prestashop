@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.8');
+define('SUDEMI_VERSION', '1.2.9');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -428,12 +428,13 @@ class Sudemi extends Module
             }
         }
 
+        // Both only ask for a full sync: it never runs inside a page request. The cron entry sends
+        // it (or, without cron, small steps after back-office pages; see SudemiSync::work).
         if (Tools::isSubmit('sudemi_sync')) {
             $output .= $this->guard('sudemi_sync');
             if ($output === '') {
-                $output .= SudemiSync::runFull()
-                    ? $this->displayConfirmation($this->l('The catalogue was sent.'))
-                    : $this->displayError($this->l('The catalogue could not be sent. Nothing was delisted.'));
+                SudemiSync::request();
+                $output .= $this->displayConfirmation($this->l('The catalogue sync has started and runs in the background; the catalogue is sent within a few minutes.'));
             }
         }
 
@@ -443,14 +444,8 @@ class Sudemi extends Module
                 SudemiShipping::saveDays(Tools::getValue('handling_days'), Tools::getValue('transit_days'));
                 SudemiShipping::saveCarriers((array) Tools::getValue('sudemi_carriers', []));
                 // Every product carries the times, so the catalogue is sent again.
-                $sent = SudemiSync::runFull();
-                if (!$sent) {
-                    // Still owed: the cron entry (or the next back-office pages) sends it.
-                    SudemiSync::request();
-                }
-                $output .= $sent
-                    ? $this->displayConfirmation($this->l('Delivery times saved and the catalogue sent.'))
-                    : $this->displayWarning($this->l('Delivery times saved. The catalogue will be sent with the next sync.'));
+                SudemiSync::request();
+                $output .= $this->displayConfirmation($this->l('Delivery times saved. The catalogue will be sent with the next sync.'));
             }
         }
 
