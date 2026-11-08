@@ -31,8 +31,9 @@ class SudemiSync
             return false;
         }
         $syncId = (string) $started['body']['sync_id'];
-        // What the catalogue was when this sync started reading it; sent right after the commit
-        // (SudemiHeartbeat::anchor) so sudemi holds the revision this sync describes.
+        // What the catalogue was when this sync started reading it; sent with the commit and in a
+        // heartbeat right after it (SudemiHeartbeat::anchor), so sudemi holds the revision this
+        // sync describes.
         $anchor = SudemiHeartbeat::revision();
 
         self::pushShop();
@@ -74,7 +75,12 @@ class SudemiSync
             $sent += count($batch);
         }
 
-        $committed = SudemiClient::postSigned('/integration/v1/sync/' . rawurlencode($syncId) . '/commit', []);
+        // The commit carries the revision the sync started from: sudemi adopts it, so anything
+        // changed while the sync ran makes the next heartbeat disagree and is synced next time.
+        $committed = SudemiClient::postSigned(
+            '/integration/v1/sync/' . rawurlencode($syncId) . '/commit',
+            $anchor === null ? [] : ['catalogueRevision' => $anchor]
+        );
         if ($committed === null || $committed['status'] !== 200) {
             SudemiLogger::warn('The catalogue was sent but the sync could not be committed.');
 
@@ -170,6 +176,23 @@ class SudemiSync
         }
 
         $combinations = self::combinationIds($product);
+        if (empty($combinations)) {
+            // A product without combinations is one listing: sent whole, it can carry the
+            // catalogue revision (see pushListing). Inactive, it has no listing and goes as a
+            // price push below; its removal is a full sync's job, which the revision asks for.
+            try {
+                $listings = self::listings((int) $product->id, $languageId);
+            } catch (\Throwable $e) {
+                // PrestaShop prices a full product only with an employee or a cart in the
+                // context; outside one (a script, an import) the save still sends price and stock.
+                $listings = [];
+            }
+            if (count($listings) === 1) {
+                self::pushListing($listings[0]);
+
+                return;
+            }
+        }
         $targets = empty($combinations) ? [0] : ($attributeId ? [(int) $attributeId] : $combinations);
         $updates = [];
         foreach ($targets as $paid) {
@@ -197,6 +220,98 @@ class SudemiSync
             }
             SudemiLogger::warn('A price update could not be sent; it is queued for retry.');
         }
+    }
+
+    /**
+     * Sends one product's whole listing as a change push, with the catalogue revision when
+     * nothing else is waiting to be sent.
+     *
+     * A price push carries price and stock and nothing else, so sending the revision with it
+     * would tell sudemi a renamed product had arrived when it had not; the whole listing carries
+     * everything about the product. A product with combinations never comes here: a change to it
+     * can add or remove combinations, which a push cannot delist.
+     *
+     * The revision is computed here, after PrestaShop saved the change and after the change
+     * counter moved, exactly as the next heartbeat computes it. If every item applied, sudemi
+     * adopts it (catalogue_revision_agreed) and no full sync follows the edit. With price changes
+     * still queued it is left out: it would claim they had arrived.
+     */
+    private static function pushListing(array $listing)
+    {
+        $update = [
+            'externalId' => $listing['externalId'],
+            'priceMinor' => $listing['priceMinor'],
+            'currency' => $listing['currency'],
+            'inStock' => $listing['inStock'],
+            'quantity' => $listing['quantity'],
+        ];
+
+        // Counted before the attempt, not after a success: the counter is what lets sudemi
+        // notice a change that never arrived, so it has to move even when the push fails.
+        SudemiHeartbeat::noteChange();
+        // This push carries the product's newest state; an older queued price for it would
+        // otherwise be sent after it and put the old price back.
+        SudemiQueue::discard($update['externalId']);
+
+        $body = ['products' => [$listing]];
+        // A product moved into a category sudemi has not been sent would get past sudemi's
+        // category checks until a full sync, which an agreed revision makes rare. So the category
+        // tree is sent first when it changed, and without it there is no revision.
+        if (SudemiQueue::count() === 0 && self::categoriesCurrent()) {
+            $revision = SudemiHeartbeat::revision();
+            if ($revision !== null) {
+                $body['catalogueRevision'] = $revision;
+            }
+        }
+
+        $response = SudemiClient::postSigned('/integration/v1/products', $body);
+        if (!is_array($response) || $response['status'] !== 200) {
+            SudemiQueue::enqueue($update);
+            SudemiLogger::warn('A price update could not be sent; it is queued for retry.');
+        }
+    }
+
+    /** A hash of the category tree last sent to sudemi, so a change can be noticed. */
+    const CONF_CATEGORIES = 'SUDEMI_CATEGORIES_SENT';
+
+    /** Whether sudemi holds this shop's category tree as it is now; sends it when not. */
+    private static function categoriesCurrent()
+    {
+        $categories = self::categories();
+        if ($categories === null) {
+            return false;
+        }
+        if (Configuration::get(self::CONF_CATEGORIES) === self::categoriesHash($categories)) {
+            return true;
+        }
+
+        return self::sendCategories($categories);
+    }
+
+    /** Tied to the connection: a shop connected again has sent its new connection nothing. */
+    private static function categoriesHash(array $categories)
+    {
+        return hash('sha256', (string) SudemiClient::installId() . '|' . json_encode($categories, SudemiClient::jsonFlags()));
+    }
+
+    private static function sendCategories(array $categories)
+    {
+        if (empty($categories)) {
+            // sudemi takes at least one; a shop without categories has nothing to be out of date.
+            return true;
+        }
+        $response = SudemiClient::postSigned('/integration/v1/categories', ['categories' => $categories]);
+        if (!is_array($response) || $response['status'] !== 200) {
+            return false;
+        }
+        Configuration::updateValue(self::CONF_CATEGORIES, self::categoriesHash($categories));
+
+        return true;
+    }
+
+    public static function forget()
+    {
+        Configuration::deleteByName(self::CONF_CATEGORIES);
     }
 
     /** "<id_product>" or, for a combination, "<id_product>-<id_product_attribute>". */
@@ -287,10 +402,19 @@ class SudemiSync
 
     private static function pushCategories()
     {
+        $categories = self::categories();
+        if ($categories !== null) {
+            self::sendCategories($categories);
+        }
+    }
+
+    /** The category tree as sudemi takes it, or null when PrestaShop cannot read it. */
+    private static function categories()
+    {
         $languageId = (int) Configuration::get('PS_LANG_DEFAULT');
         $categories = Category::getCategories($languageId, true, false);
         if (!is_array($categories)) {
-            return;
+            return null;
         }
         $payload = [];
         foreach ($categories as $category) {
@@ -301,9 +425,7 @@ class SudemiSync
                 'description' => isset($category['description']) ? strip_tags((string) $category['description']) : '',
             ];
         }
-        if (!empty($payload)) {
-            SudemiClient::postSigned('/integration/v1/categories', ['categories' => $payload]);
-        }
+        return $payload;
     }
 
     /**

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.7
+
+- The full sync's commit carries the catalogue revision the shop had when the sync started.
+  sudemi adopts it, so a product changed or switched off while the sync ran is caught by the
+  next heartbeat and synced. The heartbeat right after the commit is still sent.
+- Saving a product without combinations sends its whole listing (title, description, price,
+  stock, categories, images, shipping) instead of price and stock only, with the shop's catalogue
+  revision computed after the save when nothing else is waiting to be sent. sudemi adopts it when
+  every item applied, so a product edit no longer costs a full catalogue sync. A product with
+  combinations, an inactive product and a push while queued price changes wait still go without
+  the revision (a full sync follows, as before). When the category tree changed since it was
+  last sent, it is sent first; if that fails, the push goes without the revision.
+- A newer push for a product drops its older queued price, which could otherwise be sent after it
+  and put the old price back.
+- A product saved outside the back office or a shop request (a script, an import), where
+  PrestaShop cannot price a full product, still sends its price and stock.
+
 ## 1.2.6
 
 - After a full catalogue sync the module tells sudemi at once which catalogue state the sync

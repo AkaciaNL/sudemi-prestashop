@@ -54,6 +54,16 @@ class SudemiQueue
         return is_array($decoded) ? $decoded : [];
     }
 
+    /** Drops what is waiting for one listing: a newer push for it carries its current state. */
+    public static function discard($externalId)
+    {
+        $pending = self::all();
+        if (array_key_exists((string) $externalId, $pending)) {
+            unset($pending[(string) $externalId]);
+            self::store($pending);
+        }
+    }
+
     public static function count()
     {
         return count(self::all());

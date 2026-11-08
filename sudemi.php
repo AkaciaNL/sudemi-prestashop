@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.6');
+define('SUDEMI_VERSION', '1.2.7');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -113,6 +113,7 @@ class Sudemi extends Module
         // Price changes that never got through go with the credential that would have signed
         // them: leaving them would mean a reinstall pushing stale prices.
         SudemiQueue::forget();
+        SudemiSync::forget();
         Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
         Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);
 
@@ -410,6 +411,7 @@ class Sudemi extends Module
                 SudemiPairing::forget();
                 SudemiHeartbeat::forget();
                 SudemiQueue::forget();
+                SudemiSync::forget();
                 Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
                 Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);
                 $output .= $this->displayConfirmation($this->l('Disconnected.'));
