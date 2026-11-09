@@ -25,6 +25,55 @@ class SudemiClient {
 		self::$calls[] = array( $path, $body );
 		return array_shift( self::$answers );
 	}
+
+	public static function sendSigned( $method, $path, array $body = array(), array $headers = array() ) {
+		self::$calls[] = array( $method . ' ' . $path, $body );
+		return array_shift( self::$answers );
+	}
+
+	public static function siteMismatch( $response ) {
+		return null;
+	}
+
+	public static function installId() {
+		return 'install-1';
+	}
+}
+
+/** Configuration in memory. */
+class Configuration {
+	public static $values = array();
+
+	public static function get( $key ) {
+		return isset( self::$values[ $key ] ) ? self::$values[ $key ] : false;
+	}
+
+	public static function updateValue( $key, $value ) {
+		self::$values[ $key ] = $value;
+		return true;
+	}
+
+	public static function deleteByName( $key ) {
+		unset( self::$values[ $key ] );
+		return true;
+	}
+}
+
+/** Collects log lines. */
+class SudemiLogger {
+	public static $lines = array();
+
+	public static function info( $m ) {
+		self::$lines[] = 'info ' . $m;
+	}
+
+	public static function warn( $m ) {
+		self::$lines[] = 'warn ' . $m;
+	}
+
+	public static function error( $m ) {
+		self::$lines[] = 'error ' . $m;
+	}
 }
 
 require __DIR__ . '/../classes/SudemiCurrency.php';
@@ -210,6 +259,84 @@ check( 'DECLINED, a repeat (revision already applied): nothing, so no second not
 check( 'DECLINED never booked here (decided by hand): nothing', array() === SudemiChanges::plan( $entry( 'DECLINED', 4 ), null ) );
 $e = SudemiChanges::entryOf( array( 'order_id' => $id, 'status' => 'DECLINED', 'revision' => 2, 'cancelled_by' => 'sudemi' ) );
 check( 'a DECLINED change entry keeps cancelled_by', 'sudemi' === $e['cancelled_by'] );
+
+// ---- tracking numbers longer than PrestaShop holds (64 of sudemi's 100) ----
+$long = str_repeat( 'A', 60 ) . 'BCDEFGHIJK' . str_repeat( 'Z', 30 );
+check( 'a tracking number is cut to PrestaShop\'s 64 characters', 64 === strlen( SudemiChanges::psTracking( $long ) ) && 'JJD1' === SudemiChanges::psTracking( ' JJD1 ' ) );
+check( 'a 100-character number sudemi has, held cut here: no tracking step (no repeated note)',
+	array( 'remember' ) === SudemiChanges::plan( $entry( 'SHIPPED', 5, array( 'tracking' => array( 'carrier' => 'DHL', 'code' => $long ) ) ), local( 'shipped', 4, substr( $long, 0, 64 ) ) ) );
+check( 'but a different long number is written',
+	array( 'tracking', 'remember' ) === SudemiChanges::plan( $entry( 'SHIPPED', 5, array( 'tracking' => array( 'carrier' => 'DHL', 'code' => 'X' . $long ) ) ), local( 'shipped', 4, substr( $long, 0, 64 ) ) ) );
+check( 'the cut number on the PrestaShop order is the one sudemi has: not sent back',
+	SudemiOrders::sameTracking( 'DHL ' . $long, substr( $long, 0, 64 ) ) && null === SudemiOrders::trackingAction( substr( $long, 0, 64 ), 'SHIPPED', 'DHL ' . $long, true, false ) );
+check( 'a different 64-character number is new', 'send' === SudemiOrders::trackingAction( str_repeat( 'Q', 64 ), 'SHIPPED', 'DHL ' . $long, true, false ) );
+
+// ---- no tracking send again after a final or refused answer ----
+check( 'the stop marker: final, refused:<number>, else nothing',
+	'final' === SudemiOrders::trackingStop( 'final', 'JJD2' ) && 'refused:JJD2' === SudemiOrders::trackingStop( 'refused', ' JJD2 ' )
+	&& '' === SudemiOrders::trackingStop( 'updated', 'JJD2' ) && '' === SudemiOrders::trackingStop( 'retry', 'JJD2' ) );
+check( 'after a final answer no number is sent again', null === SudemiOrders::trackingAction( 'JJD3', 'SHIPPED', 'DHL JJD1', true, false, 'final' ) );
+check( 'a refused number is not sent again', null === SudemiOrders::trackingAction( 'JJD2', 'SHIPPED', 'DHL JJD1', true, false, 'refused:JJD2' ) );
+check( 'another number after a refusal is sent', 'send' === SudemiOrders::trackingAction( 'JJD3', 'SHIPPED', 'DHL JJD1', true, false, 'refused:JJD2' ) );
+
+// ---- feed entries that could not be applied: retried by themselves, cursor never held back ----
+$r1 = '0f6c1c3e-1111-4222-8333-000000000001';
+$r2 = '0f6c1c3e-1111-4222-8333-000000000002';
+$list = SudemiChanges::retryNoted( array(), strtoupper( $r1 ), 1000, 'boom' );
+check( 'a failed entry goes on the retry list (no attempts yet, first failure kept)',
+	array( $r1 => array( 'attempts' => 0, 'first' => 1000, 'last' => 1000, 'error' => 'boom' ) ) === $list, $list );
+$list = SudemiChanges::retryNoted( $list, $r1, 2000, 'again' );
+check( 'failing again keeps its first failure', 1000 === $list[ $r1 ]['first'] && 'again' === $list[ $r1 ]['error'] && 1 === count( $list ) );
+check( 'verdict: retry while young and under the attempt limit, give up after it or after 3 days',
+	'retry' === SudemiChanges::retryVerdict( array( 'attempts' => 9, 'first' => 1000 ), 1000 + 3600 )
+	&& 'give_up' === SudemiChanges::retryVerdict( array( 'attempts' => SudemiChanges::RETRY_MAX_ATTEMPTS, 'first' => 1000 ), 1000 )
+	&& 'give_up' === SudemiChanges::retryVerdict( array( 'attempts' => 1, 'first' => 1000 ), 1000 + SudemiChanges::RETRY_MAX_AGE + 1 ) );
+
+$store = function ( array $orders, $install = 'install-1' ) {
+	Configuration::$values[ SudemiChanges::CONF_RETRY ] = json_encode( array( 'install' => $install, 'orders' => $orders ) );
+};
+$page = function ( $oid ) use ( $ans ) {
+	return $ans( 200, array( 'order_id' => $oid, 'status' => 'SHIPPED', 'revision' => 7, 'tracking' => array( 'carrier' => 'DHL', 'code' => 'JJD9' ), 'cancelled_by' => null ) );
+};
+$now = 5000;
+$fresh = array( 'attempts' => 0, 'first' => $now, 'last' => $now, 'error' => 'boom' );
+
+SudemiClient::$calls = array();
+SudemiClient::$answers = array( $page( $r1 ) );
+$applied = array();
+$store( array( $r1 => $fresh ) );
+SudemiChanges::retryFailed( function ( $e ) use ( &$applied ) { $applied[] = $e; return true; }, $now );
+check( 'retry: the order is fetched again (GET /integration/v1/orders/{id}) and applied as a feed entry; then off the list',
+	array( 'GET /integration/v1/orders/' . $r1 ) === array_column( SudemiClient::$calls, 0 ) && 1 === count( $applied )
+	&& 7 === $applied[0]['revision'] && 'JJD9' === $applied[0]['tracking']['code'] && array() === SudemiChanges::retries(), array( SudemiClient::$calls, $applied ) );
+
+SudemiClient::$answers = array( $page( $r1 ), null );
+$store( array( $r1 => $fresh, $r2 => $fresh ) );
+SudemiChanges::retryFailed( function ( $e ) { return false; }, $now );
+$left = SudemiChanges::retries();
+check( 'retry: not applied, or sudemi unreachable: one attempt more each, kept with the error',
+	1 === $left[ $r1 ]['attempts'] && 1 === $left[ $r2 ]['attempts'] && 'sudemi: unreachable' === $left[ $r2 ]['error'] && $now === $left[ $r2 ]['last'], $left );
+
+SudemiLogger::$lines = array();
+SudemiClient::$answers = array( $page( $r1 ) );
+$store( array( $r1 => array( 'attempts' => SudemiChanges::RETRY_MAX_ATTEMPTS - 1 ) + $fresh ) );
+SudemiChanges::retryFailed( function ( $e ) { throw new RuntimeException( 'db down' ); }, $now );
+check( 'retry: given up loudly after the last attempt (an error in the log), never silently',
+	array() === SudemiChanges::retries() && 1 === count( SudemiLogger::$lines ) && 0 === strpos( SudemiLogger::$lines[0], 'error Gave up' )
+	&& false !== strpos( SudemiLogger::$lines[0], 'db down' ), SudemiLogger::$lines );
+
+SudemiLogger::$lines = array();
+SudemiClient::$answers = array( $ans( 404, array( 'error' => 'no_such_order' ) ) );
+$store( array( $r1 => $fresh ) );
+SudemiChanges::retryFailed( function ( $e ) { return true; }, $now );
+check( 'retry: sudemi has no such order for this shop: given up at once, logged as an error',
+	array() === SudemiChanges::retries() && 0 === strpos( SudemiLogger::$lines[0], 'error Gave up' ) );
+
+SudemiClient::$calls = array();
+$store( array( $r1 => $fresh ), 'another-install' );
+SudemiChanges::retryFailed( function ( $e ) { return true; }, $now );
+check( 'retry: a list of an earlier connection is not used', array() === SudemiClient::$calls && array() === SudemiChanges::retries() );
+Configuration::$values = array();
 
 // ---- every text in all twelve languages (English is the source) ----
 check( 'the texts include the order page block and the shipping page', isset( SudemiText::EN['do_tracking'], SudemiText::EN['ship_prefill'], SudemiText::EN['payouts_delay'] ) );

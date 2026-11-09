@@ -572,7 +572,28 @@ class SudemiOrders
             return false;
         }
 
-        return $stored === $code || substr($stored, -strlen($code) - 1) === ' ' . $code;
+        if ($stored === $code || substr($stored, -strlen($code) - 1) === ' ' . $code) {
+            return true;
+        }
+        // PrestaShop holds only the first 64 characters of a longer number sudemi has: the same.
+        $space = strrpos($stored, ' ');
+        $last = $space === false ? $stored : substr($stored, $space + 1);
+
+        return SudemiChanges::psTracking($last) === $code;
+    }
+
+    /**
+     * The marker that stops a tracking send for an order: 'final' after sudemi answered that the
+     * order is delivered, cancelled or refunded, 'refused:<number>' after sudemi refused that
+     * number, '' otherwise. Pure.
+     */
+    public static function trackingStop($outcome, $code)
+    {
+        if ($outcome === 'final') {
+            return 'final';
+        }
+
+        return $outcome === 'refused' ? substr('refused:' . trim((string) $code), 0, 120) : '';
     }
 
     /**
@@ -584,9 +605,14 @@ class SudemiOrders
      * Not for an order sudemi has as delivered, cancelled or refunded (final there), and not when
      * sudemi already has this number (it came from sudemi, or was sent before).
      */
-    public static function trackingAction($code, $sudemiStatus, $sudemiTracking, $shippedHere, $shippedQueued)
+    public static function trackingAction($code, $sudemiStatus, $sudemiTracking, $shippedHere, $shippedQueued, $stop = '')
     {
         if (trim((string) $code) === '' || !$shippedHere) {
+            return null;
+        }
+        // sudemi answered final for this order, or refused this very number: never sent again.
+        $stop = (string) $stop;
+        if ($stop === 'final' || ($stop !== '' && $stop === self::trackingStop('refused', $code))) {
             return null;
         }
         if (in_array((string) $sudemiStatus, self::TRACKING_FINAL, true)) {
@@ -676,14 +702,15 @@ class SudemiOrders
         if ($code === '' || (isset(self::$trackingSent[(int) $order->id]) && self::$trackingSent[(int) $order->id] === $code)) {
             return;
         }
-        $row = Db::getInstance()->getRow('SELECT sudemi_status, tracking FROM `' . _DB_PREFIX_ . 'sudemi_order` WHERE id_order = ' . (int) $order->id);
+        $row = Db::getInstance()->getRow('SELECT sudemi_status, tracking, tracking_stop FROM `' . _DB_PREFIX_ . 'sudemi_order` WHERE id_order = ' . (int) $order->id);
         $calls = self::calls();
         $action = self::trackingAction(
             $code,
             is_array($row) ? (string) $row['sudemi_status'] : '',
             is_array($row) ? (string) $row['tracking'] : '',
             $order->hasBeenShipped(),
-            isset($calls[$sudemiId . '|shipped'])
+            isset($calls[$sudemiId . '|shipped']),
+            is_array($row) ? (string) $row['tracking_stop'] : ''
         );
         if ($action === null) {
             return;
@@ -721,6 +748,11 @@ class SudemiOrders
             return;
         }
         self::forgetCall($sudemiId . '|tracking');
+        $stop = self::trackingStop($outcome, $code);
+        if ($stop !== '' && $order) {
+            // Kept, so the next save of the order does not send it again.
+            Db::getInstance()->update('sudemi_order', ['tracking_stop' => pSQL($stop)], 'id_order = ' . (int) $order->id);
+        }
         if (in_array($outcome, ['updated', 'unchanged', 'shipped'], true)) {
             if ($order) {
                 $fields = ['tracking' => pSQL(Tools::substr(trim((isset($body['carrier']) ? (string) $body['carrier'] : '') . ' ' . $code), 0, 255))];
@@ -1580,6 +1612,7 @@ class SudemiOrders
                 `sudemi_status` VARCHAR(20) NULL,
                 `refunded_minor` BIGINT NULL,
                 `tracking` VARCHAR(255) NULL,
+                `tracking_stop` VARCHAR(120) NULL,
                 PRIMARY KEY (`id_order`),
                 UNIQUE KEY `sudemi_order_id` (`sudemi_order_id`)
             ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4'
@@ -1612,6 +1645,9 @@ class SudemiOrders
             'sudemi_status' => 'VARCHAR(20) NULL',
             'refunded_minor' => 'BIGINT NULL',
             'tracking' => 'VARCHAR(255) NULL',
+            // 'final' (sudemi has the order delivered, cancelled or refunded) or 'refused:<number>'
+            // (sudemi refused that tracking number): not sent again.
+            'tracking_stop' => 'VARCHAR(120) NULL',
         ];
         foreach ($columns as $name => $type) {
             $exists = Db::getInstance()->executeS(

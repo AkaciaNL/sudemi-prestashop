@@ -33,6 +33,17 @@ class SudemiChanges
     const DAILY_SECONDS = 86400;
     const DAILY_PAGES = 10;
 
+    /** The length of PrestaShop's tracking number fields (order_carrier.tracking_number, orders.shipping_number). */
+    const PS_TRACKING_MAX = 64;
+
+    /** A tracking number as PrestaShop can hold it (trimmed, at most PS_TRACKING_MAX characters). Pure. */
+    public static function psTracking($code)
+    {
+        $code = trim((string) $code);
+
+        return function_exists('mb_substr') ? mb_substr($code, 0, self::PS_TRACKING_MAX, 'UTF-8') : substr($code, 0, self::PS_TRACKING_MAX);
+    }
+
     /** Statuses for which the shop has (or should have) an order to fulfil. */
     const BOOKED = ['ACCEPTED', 'PAID', 'SHIPPED', 'DELIVERED'];
 
@@ -60,6 +71,7 @@ class SudemiChanges
     {
         Configuration::deleteByName(self::CONF_CURSOR);
         Configuration::deleteByName(self::CONF_DAILY);
+        Configuration::deleteByName(self::CONF_RETRY);
     }
 
     /** Uninstall only: a reconnect keeps the start, so it never imports old orders. */
@@ -99,10 +111,25 @@ class SudemiChanges
             if (!is_array($entry) || empty($entry['order_id'])) {
                 continue;
             }
+            // An entry that cannot be applied now goes on the retry list (fetched again by
+            // itself on later beats); the cursor moves on, so one order never holds up the rest.
+            $failure = null;
             try {
-                self::apply($entry);
+                if (!self::apply($entry)) {
+                    $failure = 'not applied (sudemi or the shop could not be read)';
+                }
             } catch (\Throwable $e) {
-                SudemiLogger::warn(sprintf('Could not apply the change of sudemi order %s: %s', (string) $entry['order_id'], $e->getMessage()));
+                $failure = $e->getMessage();
+            }
+            $sudemiId = strtolower((string) $entry['order_id']);
+            $list = self::retries();
+            if ($failure !== null) {
+                SudemiLogger::warn(sprintf('Could not apply the change of sudemi order %s: %s. Will try again on the next heartbeats.',
+                    (string) $entry['order_id'], $failure));
+                self::saveRetries(self::retryNoted($list, $sudemiId, time(), $failure));
+            } elseif (isset($list[$sudemiId])) {
+                unset($list[$sudemiId]);
+                self::saveRetries($list);
             }
         }
         if (isset($body['changes_cursor']) && is_string($body['changes_cursor']) && $body['changes_cursor'] !== '') {
@@ -168,7 +195,9 @@ class SudemiChanges
             $steps[] = 'refunded';
         }
         $code = isset($entry['tracking']['code']) ? trim((string) $entry['tracking']['code']) : '';
-        if ($code !== '' && $code !== (string) $local['tracking']) {
+        // PrestaShop keeps at most 64 characters of a tracking number, sudemi up to 100: compared
+        // as PrestaShop holds it, or a long number would be written (and noted) on every entry.
+        if ($code !== '' && self::psTracking($code) !== self::psTracking((string) $local['tracking'])) {
             $steps[] = 'tracking';
         }
         $refunded = isset($entry['refunded_minor']) && is_numeric($entry['refunded_minor']) ? (int) $entry['refunded_minor'] : 0;
@@ -180,32 +209,37 @@ class SudemiChanges
         return $steps;
     }
 
-    /** Applies one entry to the local order (see plan()). */
+    /**
+     * Applies one entry to the local order (see plan()).
+     *
+     * @return bool false when it could not be applied now (sudemi's order page could not be read,
+     *              or the order could not be booked here): worth trying again later
+     */
     public static function apply(array $entry)
     {
         $sudemiId = strtolower((string) $entry['order_id']);
         if (!SudemiRequests::isUuid($sudemiId)) {
-            return;
+            return true;
         }
         $order = SudemiOrders::localOrder($sudemiId);
         $steps = self::plan($entry, $order ? self::localFacts($order) : null);
         if (empty($steps)) {
-            return;
+            return true;
         }
         if ($steps[0] === 'import') {
             $detail = SudemiManage::order($sudemiId);
             if (!$detail['ok']) {
-                return;
+                return false;
             }
             $placed = isset($detail['order']['placed_at']) ? strtotime((string) $detail['order']['placed_at']) : false;
             if ($placed === false || $placed < self::since() - 3600) {
                 // Placed before this module kept orders in step: left to the merchant, never
                 // booked (and stock taken) behind their back.
-                return;
+                return true;
             }
             $order = SudemiOrders::importFromSudemi($sudemiId, $detail['order']);
             if ($order === null) {
-                return;
+                return false;
             }
         }
         $status = (string) $entry['status'];
@@ -220,6 +254,143 @@ class SudemiChanges
         if (count($steps) > 1) {
             SudemiLogger::info(sprintf('sudemi order %s is %s on sudemi; order %s updated.', $sudemiId, $status, $order->reference));
         }
+
+        return true;
+    }
+
+    // ------------------------------------------------- changes that could not be applied ----
+
+    /** JSON {install, orders: {sudemi id: {attempts, first, last, error}}}. */
+    const CONF_RETRY = 'SUDEMI_CHANGES_RETRY';
+    /** Re-fetches per order before giving up (one per heartbeat at most). */
+    const RETRY_MAX_ATTEMPTS = 10;
+    /** And at most this long (3 days) after the change first failed. */
+    const RETRY_MAX_AGE = 259200;
+    const RETRY_PER_BEAT = 20;
+    const RETRY_MAX = 500;
+
+    /** The orders whose change waits to be applied again, for this install. */
+    public static function retries()
+    {
+        $stored = json_decode((string) Configuration::get(self::CONF_RETRY), true);
+        if (!is_array($stored) || !isset($stored['install'], $stored['orders']) || !is_array($stored['orders'])
+            || $stored['install'] !== (string) SudemiClient::installId()) {
+            return [];
+        }
+
+        return $stored['orders'];
+    }
+
+    private static function saveRetries(array $list)
+    {
+        if (empty($list)) {
+            Configuration::deleteByName(self::CONF_RETRY);
+
+            return;
+        }
+        Configuration::updateValue(self::CONF_RETRY, json_encode([
+            'install' => (string) SudemiClient::installId(),
+            'orders' => $list,
+        ]));
+    }
+
+    /**
+     * The retry list with this order on it (when it is there already its attempts and first
+     * failure stay). Over RETRY_MAX the oldest are dropped, each logged as given up.
+     */
+    public static function retryNoted(array $list, $sudemiId, $now, $error)
+    {
+        $sudemiId = strtolower((string) $sudemiId);
+        if (isset($list[$sudemiId])) {
+            $list[$sudemiId]['error'] = substr((string) $error, 0, 200);
+        } else {
+            $list[$sudemiId] = ['attempts' => 0, 'first' => (int) $now, 'last' => (int) $now, 'error' => substr((string) $error, 0, 200)];
+        }
+        while (count($list) > self::RETRY_MAX) {
+            $oldest = array_keys($list)[0];
+            self::gaveUp($oldest, $list[$oldest], 'too many orders waiting to be applied again');
+            unset($list[$oldest]);
+        }
+
+        return $list;
+    }
+
+    /** 'retry' or 'give_up' (too many attempts, or failing for too long). Pure. */
+    public static function retryVerdict(array $item, $now)
+    {
+        $attempts = isset($item['attempts']) ? (int) $item['attempts'] : 0;
+        $first = isset($item['first']) ? (int) $item['first'] : (int) $now;
+
+        return $attempts >= self::RETRY_MAX_ATTEMPTS || $first < (int) $now - self::RETRY_MAX_AGE ? 'give_up' : 'retry';
+    }
+
+    private static function gaveUp($sudemiId, array $item, $why)
+    {
+        SudemiLogger::error(sprintf(
+            'Gave up applying sudemi\'s change of order %s here (%s; last error: %s). Check the order on the sudemi orders page and in PrestaShop by hand.',
+            $sudemiId,
+            $why,
+            isset($item['error']) ? (string) $item['error'] : 'unknown'
+        ));
+    }
+
+    /**
+     * Fetches each order on the retry list again (GET /integration/v1/orders/{id}) and applies
+     * it like a feed entry. Applied: off the list. Not applied: one attempt more, given up (an
+     * error in the log) after RETRY_MAX_ATTEMPTS or RETRY_MAX_AGE, or at once when sudemi has
+     * no such order for this shop. Never touches the cursor.
+     *
+     * @param callable|null $apply stands in for apply() in tests
+     * @param int|null      $now   unix time (tests)
+     */
+    public static function retryFailed($apply = null, $now = null)
+    {
+        $list = self::retries();
+        if (empty($list)) {
+            return;
+        }
+        $apply = $apply ?: [self::class, 'apply'];
+        $now = $now === null ? time() : (int) $now;
+        $done = 0;
+        foreach (array_keys($list) as $sudemiId) {
+            if ($done >= self::RETRY_PER_BEAT) {
+                break;
+            }
+            ++$done;
+            $sudemiId = (string) $sudemiId;
+            $item = $list[$sudemiId];
+            $error = null;
+            try {
+                $detail = SudemiManage::order($sudemiId);
+                if (!$detail['ok']) {
+                    $error = 'sudemi: ' . (string) $detail['error'];
+                    if ($detail['error'] === 'no_such_order') {
+                        self::gaveUp($sudemiId, ['error' => $error] + $item, 'sudemi has no such order for this shop');
+                        unset($list[$sudemiId]);
+                        continue;
+                    }
+                } elseif (!call_user_func($apply, self::entryOf($detail['order']))) {
+                    $error = 'not applied (sudemi or the shop could not be read)';
+                }
+            } catch (\Throwable $e) {
+                $error = $e->getMessage();
+            }
+            if ($error === null) {
+                SudemiLogger::info(sprintf('The change of sudemi order %s was applied on a later try.', $sudemiId));
+                unset($list[$sudemiId]);
+                continue;
+            }
+            $item['attempts'] = (isset($item['attempts']) ? (int) $item['attempts'] : 0) + 1;
+            $item['last'] = $now;
+            $item['error'] = substr($error, 0, 200);
+            if (self::retryVerdict($item, $now) === 'give_up') {
+                self::gaveUp($sudemiId, $item, sprintf('%d tries', $item['attempts']));
+                unset($list[$sudemiId]);
+                continue;
+            }
+            $list[$sudemiId] = $item;
+        }
+        self::saveRetries($list);
     }
 
     private static function applySteps($order, $sudemiId, $status, array $steps, array $entry)
@@ -318,17 +489,18 @@ class SudemiChanges
     public static function setTracking($order, $carrier, $code)
     {
         $id = (int) $order->getIdOrderCarrier();
+        $local = pSQL(self::psTracking($code));
         if ($id > 0) {
-            Db::getInstance()->update('order_carrier', ['tracking_number' => pSQL(Tools::substr($code, 0, 64))], 'id_order_carrier = ' . $id);
+            Db::getInstance()->update('order_carrier', ['tracking_number' => $local], 'id_order_carrier = ' . $id);
         } else {
             Db::getInstance()->insert('order_carrier', [
                 'id_order' => (int) $order->id,
                 'id_carrier' => (int) $order->id_carrier,
-                'tracking_number' => pSQL(Tools::substr($code, 0, 64)),
+                'tracking_number' => $local,
                 'date_add' => date('Y-m-d H:i:s'),
             ]);
         }
-        Db::getInstance()->update('orders', ['shipping_number' => pSQL(Tools::substr($code, 0, 64))], 'id_order = ' . (int) $order->id);
+        Db::getInstance()->update('orders', ['shipping_number' => $local], 'id_order = ' . (int) $order->id);
         SudemiOrders::privateMessage($order, 'Tracking from sudemi: ' . trim($carrier . ' ' . $code));
     }
 

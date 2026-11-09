@@ -158,6 +158,10 @@ class SudemiHeartbeat
 
         // Everything else that changed on sudemi (portal, seller API, support, the buyer):
         // applied to the local orders, then any further pages at once.
+        // First the orders whose change could not be applied on an earlier beat, fetched again.
+        if (array_key_exists('changed_orders', $body)) {
+            SudemiChanges::retryFailed();
+        }
         $more = SudemiChanges::handle($body);
         for ($beat = 0; $more && $beat < SudemiChanges::MORE_BEATS; ++$beat) {
             $next = SudemiClient::postSigned('/integration/v1/heartbeat', self::body());

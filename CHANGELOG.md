@@ -51,6 +51,15 @@ sudemi, and the PrestaShop order follows sudemi's answer.
   shop, sudemi (declined automatically, for example not answered in time) or the buyer (cancelled
   before the order was confirmed), always with "the buyer was not charged"; also when the
   heartbeat's re-check cancelled the order before the change feed said who (written once).
+- **Change feed entries that cannot be applied are retried.** The cursor moves on, and the order
+  goes on a retry list: fetched again by itself (`GET /orders/{id}`) on the next heartbeats and
+  applied; given up with an error in the log after 10 tries, 3 days, or when sudemi has no such
+  order.
+- **Tracking is not sent again after a final answer.** Once sudemi answers that the order is
+  delivered, cancelled or refunded, or refuses a number, saving the order does not send it again
+  (`tracking_stop` on the order table). A tracking number longer than PrestaShop's 64 characters
+  is compared as PrestaShop holds it, so it is neither written (with a note) on every feed entry
+  nor sent back cut short.
 - Module changes made by the module itself (a state that came from sudemi) are never reported back
   to sudemi by the status hook.
 - All new texts in the 12 languages of the module.
