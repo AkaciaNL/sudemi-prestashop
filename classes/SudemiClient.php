@@ -97,9 +97,20 @@ class SudemiClient
      * answer to show ("too many tickets"), not a reason to hold the page for minutes. The path
      * carries any query string, which is signed with it; a GET signs the hash of an empty body.
      */
-    public static function sendSigned($method, $path, array $body = [])
+    public static function sendSigned($method, $path, array $body = [], array $headers = [])
     {
-        return self::request($path, $body, true, $method === 'GET' ? 'GET' : 'POST');
+        return self::request($path, $body, true, $method === 'GET' ? 'GET' : 'POST', $headers);
+    }
+
+    /**
+     * A signed GET whose answer is not JSON (the CSV export): the body as it came, with the
+     * status and the headers the caller needs (content type, file name, row counts).
+     *
+     * @return array{status:int,raw:string,headers:array}|null null when sudemi could not be reached
+     */
+    public static function getRaw($path)
+    {
+        return self::request($path, [], true, 'GET', [], true);
     }
 
     private static function requestWithBackoff($path, array $body, $signed, $method = 'POST')
@@ -203,17 +214,17 @@ class SudemiClient
     /**
      * @return array{status:int,body:array}|null null when the call could not be made at all
      */
-    private static function request($path, array $body, $signed, $method = 'POST')
+    private static function request($path, array $body, $signed, $method = 'POST', array $extra = [], $rawAnswer = false)
     {
         if (is_callable(self::$interceptor)) {
-            $send = function () use ($path, $body, $signed, $method) {
-                return self::send($path, $body, $signed, $method);
+            $send = function () use ($path, $body, $signed, $method, $extra, $rawAnswer) {
+                return self::send($path, $body, $signed, $method, $extra, $rawAnswer);
             };
 
             return call_user_func(self::$interceptor, $method, $path, $body, $send);
         }
 
-        return self::send($path, $body, $signed, $method);
+        return self::send($path, $body, $signed, $method, $extra, $rawAnswer);
     }
 
     /**
@@ -233,7 +244,7 @@ class SudemiClient
         return defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0;
     }
 
-    private static function send($path, array $body, $signed, $method = 'POST')
+    private static function send($path, array $body, $signed, $method = 'POST', array $extra = [], $rawAnswer = false)
     {
         // A GET carries no body, and the signature covers the hash of the body actually sent --
         // so it has to be the hash of nothing, not the hash of "{}".
@@ -255,6 +266,12 @@ class SudemiClient
             }
             $headers = array_merge($headers, $signedHeaders);
         }
+        // Extra headers a call needs (Idempotency-Key on a refund): one line each, no line breaks.
+        foreach ($extra as $name => $value) {
+            if (preg_match('/^[A-Za-z0-9-]+$/', (string) $name)) {
+                $headers[] = $name . ': ' . preg_replace('/[\r\n]+/', '', (string) $value);
+            }
+        }
 
         $curl = curl_init(self::apiBase() . $path);
         curl_setopt_array($curl, [
@@ -270,11 +287,20 @@ class SudemiClient
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_USERAGENT => 'sudemi-prestashop/' . SUDEMI_VERSION,
         ]);
-        // Only Retry-After is read, and only so a throttled sync knows how long to pause.
+        // Retry-After, so a throttled sync knows how long to pause; for a raw answer (the CSV
+        // export) also the few headers that describe the file.
         $retryAfter = 0;
-        curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($handle, $header) use (&$retryAfter) {
+        $kept = [];
+        curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($handle, $header) use (&$retryAfter, &$kept) {
             if (stripos($header, 'retry-after:') === 0) {
                 $retryAfter = (int) trim(substr($header, strlen('retry-after:')));
+            }
+            $parts = explode(':', $header, 2);
+            if (count($parts) === 2) {
+                $name = strtolower(trim($parts[0]));
+                if (in_array($name, ['content-type', 'content-disposition', 'x-total-count', 'x-export-truncated'], true)) {
+                    $kept[$name] = trim($parts[1]);
+                }
             }
 
             return strlen($header);
@@ -288,6 +314,10 @@ class SudemiClient
             SudemiLogger::warn('Could not reach sudemi: ' . $error);
 
             return null;
+        }
+
+        if ($rawAnswer) {
+            return ['status' => $status, 'raw' => (string) $raw, 'headers' => $kept, 'retry_after' => $retryAfter];
         }
 
         $parsed = json_decode($raw, true);

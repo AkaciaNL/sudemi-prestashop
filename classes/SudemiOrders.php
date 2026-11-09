@@ -1164,6 +1164,11 @@ class SudemiOrders
     {
         if (is_array($response) && (int) $response['status'] === 200) {
             SudemiLogger::info('Order ' . $order->reference . ': refunded to the buyer through sudemi.');
+            // Known here already, so the change feed does not report this refund as news.
+            if (isset($response['body']['totalRefundedMinor']) && is_numeric($response['body']['totalRefundedMinor'])) {
+                Db::getInstance()->update('sudemi_order', ['refunded_minor' => (int) $response['body']['totalRefundedMinor']],
+                    'id_order = ' . (int) $order->id);
+            }
 
             return;
         }
@@ -1173,8 +1178,13 @@ class SudemiOrders
             . '). The buyer has NOT been paid back; contact sudemi support (support@sudemi.com).');
     }
 
-    /** @param Order $order */
-    private static function setState($order, $state)
+    /**
+     * Moves the local order to a state as the module's own change: the status hook sends nothing
+     * back to sudemi for it (sudemi is where the change came from).
+     *
+     * @param Order $order
+     */
+    public static function setState($order, $state)
     {
         self::$changingState = true;
         try {
@@ -1285,6 +1295,10 @@ class SudemiOrders
                 `sudemi_order_id` VARCHAR(36) NOT NULL,
                 `created_at` DATETIME NOT NULL,
                 `currency_code` CHAR(3) NULL,
+                `revision` INT NULL,
+                `sudemi_status` VARCHAR(20) NULL,
+                `refunded_minor` BIGINT NULL,
+                `tracking` VARCHAR(255) NULL,
                 PRIMARY KEY (`id_order`),
                 UNIQUE KEY `sudemi_order_id` (`sudemi_order_id`)
             ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4'
@@ -1304,6 +1318,32 @@ class SudemiOrders
         return Db::getInstance()->execute(
             'ALTER TABLE `' . _DB_PREFIX_ . 'sudemi_order` ADD COLUMN `currency_code` CHAR(3) NULL'
         );
+    }
+
+    /**
+     * 1.3.0: what this module last applied from sudemi for each order (the change feed applies an
+     * entry only when its revision is higher), on tables made by an older version.
+     */
+    public static function addChangeColumns()
+    {
+        $columns = [
+            'revision' => 'INT NULL',
+            'sudemi_status' => 'VARCHAR(20) NULL',
+            'refunded_minor' => 'BIGINT NULL',
+            'tracking' => 'VARCHAR(255) NULL',
+        ];
+        foreach ($columns as $name => $type) {
+            $exists = Db::getInstance()->executeS(
+                'SHOW COLUMNS FROM `' . _DB_PREFIX_ . "sudemi_order` LIKE '" . pSQL($name) . "'"
+            );
+            if (empty($exists) && !Db::getInstance()->execute(
+                'ALTER TABLE `' . _DB_PREFIX_ . 'sudemi_order` ADD COLUMN `' . bqSQL($name) . '` ' . $type
+            )) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public static function uninstallTable()
@@ -1335,9 +1375,170 @@ class SudemiOrders
         );
     }
 
+    // ------------------------------------------------- answered by hand, or on the portal ----
+
+    /**
+     * A pending-order entry (the heartbeat's pending_orders shape) built from sudemi's order page
+     * (GET /orders/{id}), so an order answered by hand or accepted on the portal is booked exactly
+     * like one the heartbeat brought. Pure.
+     *
+     * @return array|null null when the answer has no lines or no money block
+     */
+    public static function pendingFromDetail(array $detail)
+    {
+        $money = isset($detail['money']) && is_array($detail['money']) ? $detail['money'] : null;
+        $lines = isset($detail['lines']) && is_array($detail['lines']) ? $detail['lines'] : [];
+        if ($money === null || empty($lines) || empty($detail['order_id'])) {
+            return null;
+        }
+        $out = [];
+        foreach ($lines as $line) {
+            if (!is_array($line)) {
+                return null;
+            }
+            $out[] = [
+                'product_id' => isset($line['product_id']) ? (string) $line['product_id'] : '',
+                'external_id' => isset($line['external_id']) ? (string) $line['external_id'] : '',
+                'title' => isset($line['title']) ? (string) $line['title'] : '',
+                'quantity' => isset($line['quantity']) ? (int) $line['quantity'] : 1,
+                'unit_price_minor' => isset($line['unit_price_minor']) ? (int) $line['unit_price_minor'] : null,
+            ];
+        }
+
+        return [
+            'order_id' => (string) $detail['order_id'],
+            'total_minor' => isset($money['total_minor']) ? (int) $money['total_minor'] : 0,
+            'shipping_minor' => isset($money['shipping_minor']) ? (int) $money['shipping_minor'] : 0,
+            'currency_code' => isset($money['currency_code']) ? (string) $money['currency_code'] : '',
+            'destination_country' => isset($detail['destination_country']) ? (string) $detail['destination_country'] : '',
+            'lines' => $out,
+        ];
+    }
+
+    /**
+     * The merchant accepts a waiting order from the sudemi Orders page (automatic confirmation off,
+     * or an order the module could not answer). The local order is booked first, as on the
+     * heartbeat; an order this shop cannot supply is not accepted and nothing is sent.
+     *
+     * @return array{outcome:string,problem?:string} outcome paid|waiting|declined|cancelled|retry|refused|unreachable
+     */
+    public static function acceptManually($sudemiId)
+    {
+        $order = self::findLocalOrder($sudemiId);
+        if ($order === null) {
+            $prepared = self::prepareLocal($sudemiId);
+            if (isset($prepared['problem'])) {
+                return ['outcome' => 'refused', 'problem' => $prepared['problem']];
+            }
+            if (isset($prepared['error'])) {
+                return ['outcome' => $prepared['error']];
+            }
+            $order = $prepared['order'];
+        }
+
+        return ['outcome' => self::accept($sudemiId, $order, false)];
+    }
+
+    /**
+     * Books the local order for a sudemi order waiting on this shop, without answering it (the
+     * bulk accept answers many at once afterwards).
+     *
+     * @return array{order?:Order,problem?:string,error?:string}
+     */
+    public static function prepareLocal($sudemiId)
+    {
+        $existing = self::findLocalOrder($sudemiId);
+        if ($existing !== null) {
+            return ['order' => $existing];
+        }
+        $detail = SudemiManage::order($sudemiId);
+        if (!$detail['ok']) {
+            return ['error' => $detail['error'] === 'unreachable' ? 'unreachable' : 'retry'];
+        }
+        $pending = self::pendingFromDetail($detail['order']);
+        if ($pending === null) {
+            return ['error' => 'retry'];
+        }
+        $problem = self::currencyProblem($pending);
+        if ($problem === null) {
+            $problem = self::firstShortfall($pending);
+        }
+        if ($problem !== null) {
+            return ['problem' => $problem];
+        }
+        $order = self::createLocalOrder($pending, strtolower($sudemiId));
+
+        return $order ? ['order' => $order] : ['problem' => 'this shop could not record the order'];
+    }
+
+    /** Applies an /accept answer (or a bulk accept result) to a local order. */
+    public static function applyAccept($sudemiId, $order, $outcome)
+    {
+        self::applyOutcome($sudemiId, $order, $outcome, false);
+    }
+
+    /**
+     * The merchant declines a waiting order. The buyer is shown the reason; a local order booked
+     * for it is cancelled once sudemi has released it.
+     *
+     * @return string declined|paid|waiting|cancelled|retry|reason_required
+     */
+    public static function declineManually($sudemiId, $reason)
+    {
+        $reason = SudemiManage::text($reason, SudemiManage::MAX_TEXT);
+        if ($reason === '') {
+            return 'reason_required';
+        }
+        $outcome = self::rejectOutcome(SudemiClient::postSigned(
+            '/integration/v1/orders/' . rawurlencode($sudemiId) . '/reject',
+            ['reason' => $reason]
+        ));
+        $order = self::findLocalOrder($sudemiId);
+        if ($order !== null && $outcome !== 'retry') {
+            self::applyOutcome($sudemiId, $order, $outcome, true);
+        }
+
+        return $outcome;
+    }
+
+    /**
+     * An order accepted on sudemi (on the portal, or by sudemi support) that this shop has no
+     * order for: booked here from sudemi's order page, so the shop's own order list, stock and
+     * packing work as for any other. Its payment state follows from the change that brought it.
+     *
+     * @return Order|null
+     */
+    public static function importFromSudemi($sudemiId, array $detail)
+    {
+        if (self::findLocalOrder($sudemiId) !== null) {
+            return self::findLocalOrder($sudemiId);
+        }
+        $pending = self::pendingFromDetail($detail);
+        if ($pending === null || self::currencyProblem($pending) !== null) {
+            SudemiLogger::error(sprintf('sudemi order %s was accepted on sudemi, but could not be booked in this shop (no lines, or another currency). Book it by hand.', $sudemiId));
+
+            return null;
+        }
+        $order = self::createLocalOrder($pending, strtolower($sudemiId));
+        if (!$order) {
+            SudemiLogger::error(sprintf('sudemi order %s was accepted on sudemi, but this shop could not record it (a product gone, or out of stock here). Book it by hand.', $sudemiId));
+
+            return null;
+        }
+        SudemiLogger::info(sprintf('sudemi order %s was accepted on sudemi; booked here as order %s.', $sudemiId, $order->reference));
+        self::privateMessage($order, 'Accepted on sudemi (not by this module); booked here from sudemi.');
+
+        return $order;
+    }
+
     public static function autoConfirmEnabled()
     {
         $value = Configuration::get(self::CONF_AUTO_CONFIRM);
         return $value === false || $value === null || (string) $value !== '0';
+    }
+
+    public static function setAutoConfirm($on)
+    {
+        Configuration::updateValue(self::CONF_AUTO_CONFIRM, $on ? '1' : '0');
     }
 }

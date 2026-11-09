@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.13');
+define('SUDEMI_VERSION', '1.3.0');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -29,6 +29,10 @@ require_once __DIR__ . '/classes/SudemiOrders.php';
 require_once __DIR__ . '/classes/SudemiHeartbeat.php';
 require_once __DIR__ . '/classes/SudemiSupport.php';
 require_once __DIR__ . '/classes/SudemiRequests.php';
+require_once __DIR__ . '/classes/SudemiManage.php';
+require_once __DIR__ . '/classes/SudemiChanges.php';
+require_once __DIR__ . '/classes/SudemiText.php';
+require_once __DIR__ . '/classes/SudemiAdminPages.php';
 
 class Sudemi extends Module
 {
@@ -74,7 +78,59 @@ class Sudemi extends Module
             && SudemiWithdrawal::installTable()
             && $this->registerWithdrawalHooks()
             && $this->registerOrderPageHooks()
-            && $this->registerCombinationHooks();
+            && $this->registerCombinationHooks()
+            && $this->installTabs();
+    }
+
+    /**
+     * The back-office pages (1.3.0): Orders > sudemi orders and Shipping > sudemi shipping.
+     * Shared with upgrade-1.3.0.php, which adds them on existing installs. Names in the 12
+     * languages of the module, the employee's language where PrestaShop has it.
+     */
+    public function installTabs()
+    {
+        $tabs = [
+            SudemiAdminPages::ORDERS => ['AdminParentOrders', [
+                'en' => 'sudemi orders', 'nl' => 'sudemi-bestellingen', 'tr' => 'sudemi siparişleri', 'de' => 'sudemi-Bestellungen',
+                'fr' => 'Commandes sudemi', 'es' => 'Pedidos de sudemi', 'it' => 'Ordini sudemi', 'pl' => 'Zamówienia sudemi',
+                'ru' => 'Заказы sudemi', 'zh' => 'sudemi 订单', 'ar' => 'طلبات sudemi', 'he' => 'הזמנות sudemi',
+            ]],
+            SudemiAdminPages::SHIPPING => ['AdminParentShipping', [
+                'en' => 'sudemi shipping', 'nl' => 'sudemi-verzending', 'tr' => 'sudemi kargo', 'de' => 'sudemi-Versand',
+                'fr' => 'Livraison sudemi', 'es' => 'Envíos de sudemi', 'it' => 'Spedizioni sudemi', 'pl' => 'Wysyłka sudemi',
+                'ru' => 'Доставка sudemi', 'zh' => 'sudemi 配送', 'ar' => 'شحن sudemi', 'he' => 'משלוח sudemi',
+            ]],
+        ];
+        foreach ($tabs as $class => $spec) {
+            if ((int) Tab::getIdFromClassName($class) > 0) {
+                continue;
+            }
+            $tab = new Tab();
+            $tab->class_name = $class;
+            $tab->module = $this->name;
+            $tab->id_parent = (int) Tab::getIdFromClassName($spec[0]);
+            $tab->active = 1;
+            $tab->name = [];
+            foreach (Language::getLanguages(false) as $language) {
+                $iso = strtolower((string) $language['iso_code']);
+                $tab->name[(int) $language['id_lang']] = isset($spec[1][$iso]) ? $spec[1][$iso] : $spec[1]['en'];
+            }
+            if (!$tab->add()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function uninstallTabs()
+    {
+        foreach ([SudemiAdminPages::ORDERS, SudemiAdminPages::SHIPPING] as $class) {
+            $id = (int) Tab::getIdFromClassName($class);
+            if ($id > 0) {
+                (new Tab($id))->delete();
+            }
+        }
     }
 
     /**
@@ -153,6 +209,8 @@ class Sudemi extends Module
         SudemiLogger::clear();
         SudemiHeartbeat::forget();
         SudemiHeartbeat::forgetCronToken();
+        SudemiChanges::forgetSince();
+        $this->uninstallTabs();
         // Price changes that never got through go with the credential that would have signed
         // them: leaving them would mean a reinstall pushing stale prices.
         SudemiQueue::forget();
@@ -285,26 +343,28 @@ class Sudemi extends Module
         }
 
         $status = $params['newOrderStatus'];
+        // The module's own changes (a released order, or a change that came from sudemi: shipped,
+        // delivered, refunded or cancelled on the portal) are not sent back: sudemi made them.
+        if (SudemiOrders::$changingState) {
+            return;
+        }
         // sudemi holds the buyer's payment: a refund or cancellation made here has to reach it,
-        // or the shop records it and the buyer never gets the money back. The module's own
-        // cancellations (a released, never-charged order) are not sent.
-        if (!SudemiOrders::$changingState) {
-            if ((int) $status->id === (int) Configuration::get('PS_OS_REFUND')) {
-                SudemiOrders::refund($order, null, 'Refunded by the shop');
+        // or the shop records it and the buyer never gets the money back.
+        if ((int) $status->id === (int) Configuration::get('PS_OS_REFUND')) {
+            SudemiOrders::refund($order, null, 'Refunded by the shop');
 
-                return;
-            }
-            if ((int) $status->id === (int) Configuration::get('PS_OS_CANCELED')) {
-                // Asked as a reject first, because only sudemi knows whether the money was taken:
-                // an order not paid yet (accepted while other shops in the same payment still had
-                // to answer, or the acceptance never got through) is released by /reject, while
-                // sudemi refuses /cancel for it and would take the money later. If sudemi answers
-                // that it is paid, rejectFromShop cancels it there with a full refund. (PrestaShop's
-                // own "paid" flag cannot tell: Processing in progress counts as paid.)
-                SudemiOrders::rejectFromShop($order, SudemiOrders::sudemiIdOf($order), 'Cancelled by the shop');
+            return;
+        }
+        if ((int) $status->id === (int) Configuration::get('PS_OS_CANCELED')) {
+            // Asked as a reject first, because only sudemi knows whether the money was taken:
+            // an order not paid yet (accepted while other shops in the same payment still had
+            // to answer, or the acceptance never got through) is released by /reject, while
+            // sudemi refuses /cancel for it and would take the money later. If sudemi answers
+            // that it is paid, rejectFromShop cancels it there with a full refund. (PrestaShop's
+            // own "paid" flag cannot tell: Processing in progress counts as paid.)
+            SudemiOrders::rejectFromShop($order, SudemiOrders::sudemiIdOf($order), 'Cancelled by the shop');
 
-                return;
-            }
+            return;
         }
         $event = self::orderEvent((int) $status->id, !empty($status->shipped), (int) Configuration::get('PS_OS_DELIVERED'));
         if ($event === null) {
@@ -493,6 +553,14 @@ class Sudemi extends Module
             $output .= $this->guard('sudemi_support_reply');
             if ($output === '') {
                 $output .= $this->supportReply();
+            }
+        }
+
+        if (Tools::isSubmit('sudemi_autoconfirm')) {
+            $output .= $this->guard('sudemi_autoconfirm');
+            if ($output === '') {
+                SudemiOrders::setAutoConfirm((bool) Tools::getValue('sudemi_auto_on'));
+                $output .= $this->displayConfirmation(Tools::htmlentitiesUTF8(SudemiText::get($this, 'auto_saved')));
             }
         }
 
@@ -891,7 +959,10 @@ class Sudemi extends Module
         return $this->orderRequestBlock(isset($params['id_order']) ? (int) $params['id_order'] : 0);
     }
 
-    /** Nothing for most orders: only a sudemi order with an open return request gets a block. */
+    /**
+     * Nothing for most orders. A sudemi order gets the sudemi block (state on sudemi, "Send
+     * tracking to sudemi"), and the return-request block when the buyer asked to return it.
+     */
     public function orderRequestBlock($orderId)
     {
         if ($orderId <= 0 || !SudemiClient::isConnected()) {
@@ -902,9 +973,15 @@ class Sudemi extends Module
             return '';
         }
         $sudemiId = SudemiOrders::sudemiIdOf($order);
-        $request = $sudemiId === null ? null : SudemiRequests::forOrder($sudemiId);
-        if ($request === null) {
+        if ($sudemiId === null) {
             return '';
+        }
+        $pages = new SudemiAdminPages($this);
+        $this->context->smarty->assign(['sudemi_ob' => $pages->orderBlock($order)]);
+        $block = $this->display(__FILE__, 'views/templates/admin/order-sudemi.tpl');
+        $request = SudemiRequests::forOrder($sudemiId);
+        if ($request === null) {
+            return $block;
         }
         $this->context->smarty->assign([
             'sudemi_rq_labels' => $this->requestLabels(),
@@ -913,7 +990,7 @@ class Sudemi extends Module
             'sudemi_token' => $this->csrfToken(),
         ]);
 
-        return $this->display(__FILE__, 'views/templates/admin/order-request.tpl');
+        return $this->display(__FILE__, 'views/templates/admin/order-request.tpl') . $block;
     }
 
     private function csrfToken()
@@ -1080,6 +1157,18 @@ class Sudemi extends Module
             'sudemi_support' => $connected ? $this->supportSection() : null,
             'sudemi_requests' => $connected ? $this->requestSection() : null,
             'sudemi_rq_action' => $this->requestFormUrl(),
+            'sudemi_auto' => [
+                'on' => SudemiOrders::autoConfirmEnabled(),
+                'title' => SudemiText::get($this, 'auto_title'),
+                'label' => SudemiText::get($this, 'auto_on'),
+                'help' => SudemiText::get($this, 'auto_help'),
+                'save' => SudemiText::get($this, 'save'),
+            ],
+            'sudemi_links' => $connected ? [
+                'title' => SudemiText::get($this, 'links_title'),
+                'orders' => ['label' => SudemiText::get($this, 'orders_title'), 'url' => $this->adminUrl(SudemiAdminPages::ORDERS, [])],
+                'shipping' => ['label' => SudemiText::get($this, 'ship_title'), 'url' => $this->adminUrl(SudemiAdminPages::SHIPPING, [])],
+            ] : null,
             'sudemi_support_not_connected' => $this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'),
             'sudemi_support_title' => $this->l('Support'),
             'sudemi_supported' => $supported,

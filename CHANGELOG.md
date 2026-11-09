@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.3.0
+
+Orders, shipping and payouts managed from the PrestaShop back office (protocol 4d, core
+2026-11-09). sudemi stays the source of truth: the pages read from sudemi, every action is sent to
+sudemi, and the PrestaShop order follows sudemi's answer.
+
+- **Orders > sudemi orders.** The shop's orders as the seller portal shows them: a paged table with
+  the portal's filters (status with counts, dates, search by order or product, sort), what the
+  buyer paid, what the shop receives, refunds, tracking, payout state and the linked PrestaShop
+  order. Bulk actions: accept, decline (one reason for all, shown to the buyers), mark shipped
+  (carrier, a tracking number per order) and mark delivered. CSV export in any of the 12 portal
+  languages, with a decimal comma on request, made by sudemi and downloaded through the page.
+- **One order's page:** lines with the shop's own product ids, money (goods, shipping, commission,
+  what the shop receives, refunded), tracking, the history, the payout (state, expected, paid out,
+  due date), an open cancellation or return request with Accept / Reject, and the actions sudemi
+  allows now: accept, decline, ship with carrier and tracking, delivered, part refund (sent once
+  even when the form is posted twice), cancel with a full refund.
+- **Accepting by hand.** A switch on the module page turns automatic confirmation off; waiting
+  orders are then accepted or declined on the sudemi orders page. An accepted order is booked in
+  PrestaShop before sudemi is told, as on the heartbeat; an order the shop cannot supply is not
+  accepted and nothing is sent.
+- **Shipping > sudemi shipping.** The shop's shipping prices on sudemi (the shop's own carrier
+  prices, or its own price per country), filled in from the shop's carriers and zones on request,
+  with what buyers pay per country now.
+- **Payouts.** The payout account state and this shop's payouts per currency (paid out, due once
+  shipped, scheduled with the next date, on its way, held) on the sudemi orders page.
+- **Changes made anywhere reach the shop.** The heartbeat carries sudemi's change feed: an order
+  accepted, shipped, delivered, refunded or cancelled on the seller portal (or by sudemi support,
+  the buyer, a deadline) is applied to the PrestaShop order (state, tracking number, a note per
+  refund), only when sudemi's revision is newer than the one applied, without e-mails and without
+  sending the change back. An order accepted on sudemi that has no PrestaShop order is booked. A
+  daily check of the orders since yesterday catches anything the feed missed.
+- **Send tracking to sudemi** from PrestaShop's own order page, so a tracking number typed after
+  the order was marked shipped here still reaches the buyer (while sudemi has the order as paid).
+  The sudemi block on the order page also shows the order's state on sudemi.
+- Module changes made by the module itself (a state that came from sudemi) are never reported back
+  to sudemi by the status hook.
+- All new texts in the 12 languages of the module.
+
 ## 1.2.13
 
 - **Invoice VAT rows match the order lines.** sudemi orders are saved with the shop's own

@@ -102,6 +102,22 @@
       </tr>
     </table>
 
+    {if $sudemi_links}
+      <h4>{$sudemi_links.title|escape:'html':'UTF-8'}</h4>
+      <p id="sudemi-links">
+        <a class="btn btn-default" href="{$sudemi_links.orders.url|escape:'html':'UTF-8'}">{$sudemi_links.orders.label|escape:'html':'UTF-8'}</a>
+        <a class="btn btn-default" href="{$sudemi_links.shipping.url|escape:'html':'UTF-8'}">{$sudemi_links.shipping.label|escape:'html':'UTF-8'}</a>
+      </p>
+    {/if}
+
+    <form method="post" action="{$sudemi_action|escape:'html':'UTF-8'}" id="sudemi-autoconfirm">
+      <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
+      <h4>{$sudemi_auto.title|escape:'html':'UTF-8'}</h4>
+      <div class="checkbox"><label><input type="checkbox" name="sudemi_auto_on" value="1"{if $sudemi_auto.on} checked{/if} /> {$sudemi_auto.label|escape:'html':'UTF-8'}</label></div>
+      <p class="help-block">{$sudemi_auto.help|escape:'html':'UTF-8'}</p>
+      <button type="submit" name="sudemi_autoconfirm" value="1" class="btn btn-default">{$sudemi_auto.save|escape:'html':'UTF-8'}</button>
+    </form>
+
     {if $sudemi_history === null}
       <div class="alert alert-warning">{$sudemi_history_error|escape:'html':'UTF-8'}</div>
     {else}

@@ -98,6 +98,7 @@ class Db {
 require __DIR__ . '/../classes/SudemiClient.php';
 require __DIR__ . '/../classes/SudemiHeartbeat.php';
 require __DIR__ . '/../classes/SudemiRequests.php';
+require __DIR__ . '/../classes/SudemiChanges.php';
 
 Configuration::$values = array(
 	'SUDEMI_INSTALL_ID' => 'inst-1',
@@ -180,6 +181,8 @@ answer_with( 200, array( 'catalogue_listed' => true ) );
 SudemiHeartbeat::run();
 $status = SudemiHeartbeat::status();
 check( 'heartbeat: the next good beat clears it', true === $status['connected'] && ! isset( $status['problem'] ) );
+check( 'heartbeat: the beat asks for the change feed from the start (changesCursor "")',
+	'' === ( json_decode( last_request()['body'], true )['changesCursor'] ?? null ) );
 
 // ---- return requests ride on the beat: stored each 200 beat, cleared when the key is absent ----
 $open = array( array( 'request_id' => 'aaaaaaaa-1111-4222-8333-944455556666', 'order_id' => '7d9e8f00-1111-4222-8333-944455556666',

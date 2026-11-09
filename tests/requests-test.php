@@ -161,7 +161,7 @@ $module = (string) file_get_contents( __DIR__ . '/../sudemi.php' );
 check( 'the buyer-cancel branch changes the state through setState (flagged as the module\'s own)',
 	(bool) preg_match( "/action === 'buyer_cancel'\\) \\{.*?self::setState\\(\\\$order, \\(int\\) Configuration::get\\('PS_OS_CANCELED'\\)\\)/s", $orders ) );
 check( 'the status hook sends no /cancel or /refund while the module changes the state',
-	(bool) preg_match( '/if \(!SudemiOrders::\$changingState\) \{.*?SudemiOrders::refund.*?SudemiOrders::rejectFromShop/s', $module ) );
+	(bool) preg_match( '/if \(SudemiOrders::\$changingState\) \{\s*return;\s*\}.*?SudemiOrders::refund.*?SudemiOrders::rejectFromShop/s', $module ) );
 
 // Every string the module page and the order page show is translated into all twelve languages
 // (English is the source). Keys are md5 of the source exactly as written in sudemi.php.

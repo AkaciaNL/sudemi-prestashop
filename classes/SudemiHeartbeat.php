@@ -52,12 +52,7 @@ class SudemiHeartbeat
 
         $drained = SudemiQueue::drain();
 
-        $response = SudemiClient::postSigned('/integration/v1/heartbeat', [
-            'catalogueRevision' => self::revision(),
-            'productCount' => self::productCount(),
-            'intervalSeconds' => self::DEFAULT_INTERVAL,
-            'pluginVersion' => SUDEMI_VERSION,
-        ]);
+        $response = SudemiClient::postSigned('/integration/v1/heartbeat', self::body());
 
         if (!is_array($response)) {
             self::remember(['reachable' => false, 'checked' => time()]);
@@ -161,6 +156,19 @@ class SudemiHeartbeat
         SudemiOrders::reconcile($handled);
         SudemiOrders::drainCalls();
 
+        // Everything else that changed on sudemi (portal, seller API, support, the buyer):
+        // applied to the local orders, then any further pages at once.
+        $more = SudemiChanges::handle($body);
+        for ($beat = 0; $more && $beat < SudemiChanges::MORE_BEATS; ++$beat) {
+            $next = SudemiClient::postSigned('/integration/v1/heartbeat', self::body());
+            $more = is_array($next) && (int) $next['status'] === 200 && is_array($next['body'])
+                && SudemiChanges::handle($next['body']);
+        }
+        // And once a day the orders placed since yesterday, for anything the feed missed.
+        if (array_key_exists('changed_orders', $body)) {
+            SudemiChanges::daily();
+        }
+
         // sudemi and this shop disagree about what the catalogue is, so something did not
         // arrive. A full sync is the only answer that does not involve guessing which product.
         // Asked for here, never run here: a full sync of a large catalogue takes minutes, and a
@@ -175,6 +183,18 @@ class SudemiHeartbeat
         }
 
         return true;
+    }
+
+    /** What a beat says, with the change-feed cursor (protocol 4d). */
+    private static function body()
+    {
+        return [
+            'catalogueRevision' => self::revision(),
+            'productCount' => self::productCount(),
+            'intervalSeconds' => self::DEFAULT_INTERVAL,
+            'pluginVersion' => SUDEMI_VERSION,
+            'changesCursor' => SudemiChanges::cursor(),
+        ];
     }
 
     /** True when the last beat is older than the interval sudemi is holding this shop to. */
@@ -267,6 +287,7 @@ class SudemiHeartbeat
         Configuration::deleteByName(self::CONF_INTERVAL);
         Configuration::deleteByName(self::CONF_CHANGES);
         SudemiRequests::forget();
+        SudemiChanges::forget();
     }
 
     /**
