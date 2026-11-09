@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.13
+
+- **Invoice VAT rows match the order lines.** sudemi orders are saved with the shop's own
+  rounding settings; before, PrestaShop read the missing setting as "round up" and the invoice's
+  VAT rows could be one cent off per rate.
+
 ## 1.2.12
 
 - **Orders are booked in the currency the buyer paid in.** A sudemi order is created in the
