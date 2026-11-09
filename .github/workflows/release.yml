@@ -61,4 +61,4 @@ jobs:
           awk -v v="$VERSION" '$0 ~ "^## " v "( |$)" {on=1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md
           printf '\nInstall: PrestaShop back office, Modules > Module Manager > Upload a module, choose %s.\n' "$ZIP" >> notes.md
           gh release create "$GITHUB_REF_NAME" "$ZIP" "$ZIP.sha256" \
-            --title "sudemi module for PrestaShop $VERSION" --notes-file notes.md --verify-tag
+            --title "sudemi module for PrestaShop $VERSION" --notes-file notes.md
