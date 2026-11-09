@@ -38,6 +38,18 @@
           <p class="help-block">{l s='The private half never leaves this server and is never sent to sudemi. It cannot be shown here either.' mod='sudemi'}</p>
         </td>
       </tr>
+      {if $sudemi_currency}
+      <tr>
+        <th>{$sudemi_currency.label|escape:'html':'UTF-8'}</th>
+        <td>
+          <code id="sudemi-shop-currency">{$sudemi_currency.code|escape:'html':'UTF-8'}</code>
+          <p class="help-block">{$sudemi_currency.help|escape:'html':'UTF-8'}</p>
+          {foreach from=$sudemi_currency.warnings item=warning}
+            <div class="alert alert-warning">{$warning|escape:'html':'UTF-8'}</div>
+          {/foreach}
+        </td>
+      </tr>
+      {/if}
     </table>
 
     {* Whether sudemi is showing this shop's products, in sudemi's own words.
@@ -101,6 +113,7 @@
             <th>{$sudemi_history.labels.order|escape:'html':'UTF-8'}</th>
             <th>{$sudemi_history.labels.items|escape:'html':'UTF-8'}</th>
             <th>{$sudemi_history.labels.status|escape:'html':'UTF-8'}</th>
+            <th>{$sudemi_history.labels.paid|escape:'html':'UTF-8'}</th>
             <th>{$sudemi_history.labels.net|escape:'html':'UTF-8'}</th>
             <th>{$sudemi_history.labels.customer|escape:'html':'UTF-8'}</th>
           </tr></thead>
@@ -110,6 +123,7 @@
               <td><code>{$row.id|escape:'html':'UTF-8'}</code><br><small>{$row.date|escape:'html':'UTF-8'}</small></td>
               <td>{$row.items|escape:'html':'UTF-8'}</td>
               <td>{$row.status|escape:'html':'UTF-8'}</td>
+              <td>{$row.paid|escape:'html':'UTF-8'}</td>
               <td>{$row.net|escape:'html':'UTF-8'}</td>
               <td>{$row.customer|escape:'html':'UTF-8'}</td>
             </tr>
@@ -168,7 +182,7 @@
     <h4>{l s='Delivery to sudemi buyers' mod='sudemi'}</h4>
     {if $sudemi_shipping_preview}
       <p>{l s='Shipping prices sent to sudemi (from your carriers; one item, your first product):' mod='sudemi'}
-        {foreach from=$sudemi_shipping_preview item=rate name=rates}{$rate.country|escape:'html':'UTF-8'} {($rate.costMinor/100)|string_format:'%.2f'} ({$rate.carrier|escape:'html':'UTF-8'}){if !$smarty.foreach.rates.last}, {/if}{/foreach}</p>
+        {foreach from=$sudemi_shipping_preview item=rate name=rates}{$rate.country|escape:'html':'UTF-8'} {$rate.cost|escape:'html':'UTF-8'} ({$rate.carrier|escape:'html':'UTF-8'}){if !$smarty.foreach.rates.last}, {/if}{/foreach}</p>
       <p class="help-block">{l s='Countries without a fixed price (module-computed carriers, out-of-range weights or prices) are left out rather than guessed.' mod='sudemi'}</p>
     {else}
       <div class="alert alert-warning">{l s='No shipping price could be read from your carriers, so sudemi buyers cannot order. Give an active carrier a price or weight range for the zones you ship to.' mod='sudemi'}</div>

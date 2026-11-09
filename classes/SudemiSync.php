@@ -702,7 +702,7 @@ class SudemiSync
 
     private static function pushShop()
     {
-        SudemiClient::postSigned('/integration/v1/shop', [
+        $response = SudemiClient::postSigned('/integration/v1/shop', [
             'displayName' => Configuration::get('PS_SHOP_NAME'),
             'description' => Configuration::get('PS_SHOP_NAME'),
             'languages' => [Language::getIsoById((int) Configuration::get('PS_LANG_DEFAULT'))],
@@ -710,6 +710,8 @@ class SudemiSync
             'supportEmail' => Configuration::get('PS_SHOP_EMAIL'),
             'shipsTo' => self::shippingCountries(),
         ]);
+        // What sudemi now has as this shop's currency, shown on the configuration page.
+        SudemiCurrency::rememberShopAnswer($response, self::currency());
     }
 
     private static function pushCategories()
@@ -801,17 +803,17 @@ class SudemiSync
         return SudemiWithdrawal::apply($payload, SudemiWithdrawal::get($productId));
     }
 
-    /** Money in minor units: a float price is a rounding error waiting for a checkout. */
+    /**
+     * Money in the shop currency's own minor units (no fixed x100: a zero-decimal currency has
+     * none): a float price is a rounding error waiting for a checkout.
+     */
     private static function minor($price)
     {
-        if ($price === null || $price === '') {
-            return null;
-        }
-
-        return (int) round((float) $price * 100);
+        return SudemiCurrency::toMinor($price, self::currency());
     }
 
-    private static function currency()
+    /** The currency this shop sells in: PrestaShop's default currency. */
+    public static function currency()
     {
         $currency = new Currency((int) Configuration::get('PS_CURRENCY_DEFAULT'));
 

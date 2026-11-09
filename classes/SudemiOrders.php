@@ -87,7 +87,13 @@ class SudemiOrders
             return;
         }
 
-        $shortfall = self::firstShortfall($pending);
+        // An order in another currency than the one this shop sells in is declined rather than
+        // booked in the wrong currency (protocol 4c): the shop's books would show amounts the
+        // buyer never paid.
+        $shortfall = self::currencyProblem($pending);
+        if ($shortfall === null) {
+            $shortfall = self::firstShortfall($pending);
+        }
         if ($shortfall !== null) {
             // The ordinary case, and not a failure. The buyer's hold is released within a minute.
             SudemiClient::postSigned(
@@ -672,6 +678,35 @@ class SudemiOrders
     }
 
     /**
+     * Why the order's currency cannot be booked here, or null. Null for a core that sends no
+     * currency_code (the order is then booked as before).
+     *
+     * @param array $pending
+     * @return string|null
+     */
+    private static function currencyProblem(array $pending)
+    {
+        $code = isset($pending['currency_code']) ? (string) $pending['currency_code'] : '';
+        if (SudemiCurrency::normalise($code) === '') {
+            return SudemiCurrency::orderProblem($code, '', true);
+        }
+
+        return SudemiCurrency::orderProblem($code, SudemiSync::currency(), self::activeCurrencyId($code) > 0);
+    }
+
+    /** The id of an installed, switched-on PrestaShop currency with this ISO code, or 0. */
+    private static function activeCurrencyId($code)
+    {
+        $id = (int) Currency::getIdByIsoCode(SudemiCurrency::normalise($code));
+        if ($id <= 0) {
+            return 0;
+        }
+        $currency = new Currency($id);
+
+        return Validate::isLoadedObject($currency) && $currency->active && empty($currency->deleted) ? $id : 0;
+    }
+
+    /**
      * Records the order so the merchant fulfils it through their normal workflow.
      *
      * A real order rather than a note of our own: it appears where the merchant already looks,
@@ -709,12 +744,15 @@ class SudemiOrders
 
         $cart = new Cart();
         $cart->id_lang = (int) Configuration::get('PS_LANG_DEFAULT');
-        $cart->id_currency = (int) Currency::getIdByIsoCode(
-            isset($pending['currency_code']) ? (string) $pending['currency_code'] : 'EUR'
-        );
+        // In the order's own currency (checked in currencyProblem before this); a core that sends
+        // none gets the shop's default currency, as before.
+        $code = SudemiCurrency::normalise(isset($pending['currency_code']) ? $pending['currency_code'] : '');
+        $cart->id_currency = $code !== '' ? self::activeCurrencyId($code) : (int) Configuration::get('PS_CURRENCY_DEFAULT');
         if (!$cart->id_currency) {
-            $cart->id_currency = (int) Configuration::get('PS_CURRENCY_DEFAULT');
+            return null;
         }
+        $currency = new Currency((int) $cart->id_currency);
+        $code = Validate::isLoadedObject($currency) ? (string) $currency->iso_code : $code;
         $cart->id_shop = (int) Context::getContext()->shop->id;
         $cart->id_customer = (int) $customer->id;
         $cart->id_address_delivery = (int) $address->id;
@@ -761,12 +799,12 @@ class SudemiOrders
                 }
                 $gross = $paidByProduct[$key];
                 $net = self::netOf($gross, (float) $row['price'], (float) $row['price_wt']);
-                $row['price_wt'] = round($gross / 100 / $qty, 6);
-                $row['price'] = round($net / 100 / $qty, 6);
+                $row['price_wt'] = round(SudemiCurrency::fromMinor($gross, $code) / $qty, 6);
+                $row['price'] = round(SudemiCurrency::fromMinor($net, $code) / $qty, 6);
                 $row['price_with_reduction'] = $row['price_wt'];
                 $row['price_with_reduction_without_tax'] = $row['price'];
-                $row['total_wt'] = $gross / 100;
-                $row['total'] = $net / 100;
+                $row['total_wt'] = SudemiCurrency::fromMinor($gross, $code);
+                $row['total'] = SudemiCurrency::fromMinor($net, $code);
                 $goodsIncl += $gross;
                 $goodsExcl += $net;
             }
@@ -793,7 +831,7 @@ class SudemiOrders
         $order->module = 'sudemi';
         // Prefixed so a merchant scanning their order list can see at a glance where it came from.
         $order->reference = self::REFERENCE_PREFIX . '-' . Tools::substr(str_replace('-', '', $sudemiId), 0, 9);
-        $order->total_paid = isset($pending['total_minor']) ? ((int) $pending['total_minor']) / 100 : 0.0;
+        $order->total_paid = isset($pending['total_minor']) ? SudemiCurrency::fromMinor($pending['total_minor'], $code) : 0.0;
         $order->total_paid_real = 0.0;
         $order->total_paid_tax_incl = $order->total_paid;
         if ($paid === null) {
@@ -805,18 +843,21 @@ class SudemiOrders
             // The goods and the shipping as the buyer paid them, so the shop's books show the
             // shipping instead of folding it into the products. The total stays total_minor.
             $tax = ($goodsIncl - $goodsExcl) + ($paid['shipping'] - $shippingExcl);
-            $order->total_paid_tax_excl = ($paid['total'] - $tax) / 100;
-            $order->total_products = $goodsExcl / 100;
-            $order->total_products_wt = $goodsIncl / 100;
-            $order->total_shipping = $paid['shipping'] / 100;
-            $order->total_shipping_tax_incl = $paid['shipping'] / 100;
-            $order->total_shipping_tax_excl = $shippingExcl / 100;
+            $order->total_paid_tax_excl = SudemiCurrency::fromMinor($paid['total'] - $tax, $code);
+            $order->total_products = SudemiCurrency::fromMinor($goodsExcl, $code);
+            $order->total_products_wt = SudemiCurrency::fromMinor($goodsIncl, $code);
+            $order->total_shipping = SudemiCurrency::fromMinor($paid['shipping'], $code);
+            $order->total_shipping_tax_incl = SudemiCurrency::fromMinor($paid['shipping'], $code);
+            $order->total_shipping_tax_excl = SudemiCurrency::fromMinor($shippingExcl, $code);
             $order->carrier_tax_rate = $carrierRate;
         }
         // Awaiting payment rather than paid: an order that looks payable before the money is
         // taken is one somebody ships too early.
         $order->current_state = $state;
-        $order->conversion_rate = 1.0;
+        // The order currency's rate against the shop default, as PrestaShop's own checkout
+        // records it (1 when the order is in the default currency, which is the normal case).
+        $order->conversion_rate = Validate::isLoadedObject($currency) && (float) $currency->conversion_rate > 0
+            ? (float) $currency->conversion_rate : 1.0;
         $order->valid = 0;
         if (!$order->add()) {
             $cart->delete();
@@ -837,8 +878,8 @@ class SudemiOrders
             $orderCarrier->id_order = (int) $order->id;
             $orderCarrier->id_carrier = $carrierId;
             $orderCarrier->weight = (float) $cart->getTotalWeight();
-            $orderCarrier->shipping_cost_tax_excl = $shippingExcl / 100;
-            $orderCarrier->shipping_cost_tax_incl = $paid['shipping'] / 100;
+            $orderCarrier->shipping_cost_tax_excl = SudemiCurrency::fromMinor($shippingExcl, $code);
+            $orderCarrier->shipping_cost_tax_incl = SudemiCurrency::fromMinor($paid['shipping'], $code);
             $orderCarrier->add();
         }
 
@@ -847,7 +888,7 @@ class SudemiOrders
         $history->id_order_state = $state;
         $history->add();
 
-        self::remember($order->id, $sudemiId);
+        self::remember($order->id, $sudemiId, $code);
 
         return $order;
     }
@@ -1074,11 +1115,35 @@ class SudemiOrders
         if ($sudemiId === null) {
             return;
         }
-        $body = ['reason' => $reason];
-        if ($amountMinor !== null) {
-            $body['amountMinor'] = (int) $amountMinor;
+        // In the order's currency (protocol 4c). A refund in another currency than the buyer paid
+        // in is not sent: the amount would mean something else on sudemi's side.
+        $prepared = SudemiCurrency::refundBody($amountMinor, $reason, self::currencyOf($order), self::bookedCurrency($order));
+        if (isset($prepared['error'])) {
+            SudemiLogger::error('Order ' . $order->reference . ': ' . $prepared['error']);
+            self::privateMessage($order, 'sudemi refund not sent: ' . $prepared['error']);
+
+            return;
         }
-        self::noteMoneyResult($order, SudemiClient::postSigned('/integration/v1/orders/' . rawurlencode($sudemiId) . '/refund', $body));
+        self::noteMoneyResult($order, SudemiClient::postSigned('/integration/v1/orders/' . rawurlencode($sudemiId) . '/refund', $prepared['body']));
+    }
+
+    /** The ISO code of a PrestaShop order's currency, or '' when it cannot be read. */
+    public static function currencyOf($order)
+    {
+        $currency = new Currency((int) $order->id_currency);
+
+        return Validate::isLoadedObject($currency) ? (string) $currency->iso_code : '';
+    }
+
+    /** The currency sudemi booked the order in, or null for an order recorded before 1.2.12. */
+    public static function bookedCurrency($order)
+    {
+        $value = Db::getInstance()->getValue(
+            'SELECT currency_code FROM `' . _DB_PREFIX_ . 'sudemi_order`
+              WHERE id_order = ' . (int) $order->id
+        );
+
+        return empty($value) ? null : (string) $value;
     }
 
     /** A paid order cancelled in the shop: refunded in full and cancelled on sudemi. */
@@ -1215,9 +1280,25 @@ class SudemiOrders
                 `id_order` INT UNSIGNED NOT NULL,
                 `sudemi_order_id` VARCHAR(36) NOT NULL,
                 `created_at` DATETIME NOT NULL,
+                `currency_code` CHAR(3) NULL,
                 PRIMARY KEY (`id_order`),
                 UNIQUE KEY `sudemi_order_id` (`sudemi_order_id`)
             ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4'
+        );
+    }
+
+    /** 1.2.12: the currency sudemi booked each order in, on tables made by an older version. */
+    public static function addCurrencyColumn()
+    {
+        $exists = Db::getInstance()->executeS(
+            'SHOW COLUMNS FROM `' . _DB_PREFIX_ . "sudemi_order` LIKE 'currency_code'"
+        );
+        if (!empty($exists)) {
+            return true;
+        }
+
+        return Db::getInstance()->execute(
+            'ALTER TABLE `' . _DB_PREFIX_ . 'sudemi_order` ADD COLUMN `currency_code` CHAR(3) NULL'
         );
     }
 
@@ -1239,12 +1320,14 @@ class SudemiOrders
         return empty($value) ? null : (string) $value;
     }
 
-    private static function remember($orderId, $sudemiId)
+    private static function remember($orderId, $sudemiId, $currency = '')
     {
+        $currency = SudemiCurrency::normalise($currency);
         Db::getInstance()->execute(
             'INSERT IGNORE INTO `' . _DB_PREFIX_ . 'sudemi_order`
-                 (id_order, sudemi_order_id, created_at)
-             VALUES (' . (int) $orderId . ", '" . pSQL($sudemiId) . "', NOW())"
+                 (id_order, sudemi_order_id, created_at, currency_code)
+             VALUES (' . (int) $orderId . ", '" . pSQL($sudemiId) . "', NOW(), "
+                . ($currency !== '' ? "'" . pSQL($currency) . "'" : 'NULL') . ')'
         );
     }
 

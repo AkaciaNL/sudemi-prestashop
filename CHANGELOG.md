@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2.12
+
+- **Orders are booked in the currency the buyer paid in.** A sudemi order is created in the
+  currency it carries (the shop's currency on sudemi). Before, an order in a currency the shop did
+  not have was quietly booked in the shop's default currency. An order in another currency than
+  the shop sells in, or in a currency that is not switched on in the shop, is now declined with the
+  reason (nothing is charged) and logged, instead of being booked with the wrong amounts.
+- **Amounts in each currency's own minor units.** Prices, shipping prices, orders and refunds use
+  the currency's decimals instead of a fixed x100 (a currency without decimals is no longer
+  multiplied by 100).
+- **Refunds name their currency.** A refund (credit slip) is sent to sudemi with the order's
+  currency. A refund in another currency than the buyer paid in is not sent: the module log and a
+  note on the order say so, and the buyer has not been paid back until it is refunded in the
+  right currency. The currency of each sudemi order is recorded from this version on (upgrade adds
+  the column); older orders are refunded in their order currency as before.
+- **The module page shows the shop currency sudemi has**, with what it means for buyers and
+  payouts (payouts are in euros; for another currency the card company takes about 2 percent), a
+  warning when sudemi does not take payments in the shop's currency (EUR, PLN, CZK, HUF, RON,
+  SEK, DKK, CHF, GBP, NOK, TRY), and a warning when sudemi still has another currency than the
+  shop now sells in.
+- The order history on the module page shows what the buyer paid, with its currency, next to what
+  the shop receives.
+- New texts in all 12 languages.
+
 ## 1.2.11
 
 - **A confirmed connection is collected by cron.** While a connection is started and not yet

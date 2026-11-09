@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.11');
+define('SUDEMI_VERSION', '1.2.12');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -23,6 +23,7 @@ require_once __DIR__ . '/classes/SudemiPairing.php';
 require_once __DIR__ . '/classes/SudemiQueue.php';
 require_once __DIR__ . '/classes/SudemiShipping.php';
 require_once __DIR__ . '/classes/SudemiWithdrawal.php';
+require_once __DIR__ . '/classes/SudemiCurrency.php';
 require_once __DIR__ . '/classes/SudemiSync.php';
 require_once __DIR__ . '/classes/SudemiOrders.php';
 require_once __DIR__ . '/classes/SudemiHeartbeat.php';
@@ -158,6 +159,7 @@ class Sudemi extends Module
         SudemiSync::forget();
         Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
         Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);
+        Configuration::deleteByName(SudemiCurrency::CONF_SHOP_CURRENCY);
 
         return parent::uninstall();
     }
@@ -361,7 +363,12 @@ class Sudemi extends Module
         if (!$row) {
             return;
         }
-        $amount = (int) round(((float) $row['total_products_tax_incl'] + (float) $row['total_shipping_tax_incl']) * 100);
+        // In the order's currency, in that currency's own minor units (a credit slip is always in
+        // the order's currency in PrestaShop).
+        $amount = (int) SudemiCurrency::toMinor(
+            (float) $row['total_products_tax_incl'] + (float) $row['total_shipping_tax_incl'],
+            SudemiOrders::currencyOf($order)
+        );
         if ($amount > 0) {
             SudemiOrders::refund($order, $amount, 'Partial refund (credit slip)');
         }
@@ -470,6 +477,7 @@ class Sudemi extends Module
                 SudemiSync::forget();
                 Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
                 Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);
+                Configuration::deleteByName(SudemiCurrency::CONF_SHOP_CURRENCY);
                 $output .= $this->displayConfirmation($this->l('Disconnected.'));
             }
         }
@@ -945,13 +953,15 @@ class Sudemi extends Module
                 $items[] = (isset($line['title']) ? (string) $line['title'] : '') . ($qty > 1 ? ' × ' . $qty : '');
             }
             $status = isset($order['status']) ? (string) $order['status'] : '';
+            // The currency the buyer was charged in (the shop's currency when the order was placed).
+            $currency = isset($order['currency_code']) ? (string) $order['currency_code'] : 'EUR';
             $rows[] = [
                 'id' => Tools::substr((string) $order['order_id'], 0, 8),
                 'date' => isset($order['placed_at']) ? Tools::substr((string) $order['placed_at'], 0, 10) : '',
                 'items' => implode(', ', $items),
                 'status' => isset($labels[$status]) ? $labels[$status] : $status,
-                'net' => number_format((isset($order['your_net_minor']) ? (int) $order['your_net_minor'] : 0) / 100, 2)
-                    . ' ' . (isset($order['currency_code']) ? (string) $order['currency_code'] : 'EUR'),
+                'paid' => isset($order['total_minor']) ? SudemiCurrency::format((int) $order['total_minor'], $currency) : '',
+                'net' => SudemiCurrency::format(isset($order['your_net_minor']) ? (int) $order['your_net_minor'] : 0, $currency),
                 // Only present once sudemi has released it, which is only after this shop confirmed.
                 'customer' => isset($order['customer_name']) ? (string) $order['customer_name'] : ' - ',
             ];
@@ -967,6 +977,7 @@ class Sudemi extends Module
                 'order' => $this->l('Order'),
                 'items' => $this->l('What sold'),
                 'status' => $this->l('Status'),
+                'paid' => $this->l('Buyer paid'),
                 'net' => $this->l('You receive'),
                 'customer' => $this->l('Customer'),
             ],
@@ -982,7 +993,44 @@ class Sudemi extends Module
         }
         $product = new Product($id, false, (int) Configuration::get('PS_LANG_DEFAULT'));
 
-        return SudemiShipping::preview($product, Product::getPriceStatic($id, true));
+        $rates = SudemiShipping::preview($product, Product::getPriceStatic($id, true));
+        foreach ($rates as &$rate) {
+            $rate['cost'] = SudemiCurrency::format($rate['costMinor'], SudemiSync::currency());
+        }
+        unset($rate);
+
+        return $rates;
+    }
+
+    /**
+     * The shop's currency as sudemi sees it, with a warning when sudemi does not take payments
+     * in it or still has another one for this shop.
+     */
+    private function currencySection()
+    {
+        $declared = SudemiSync::currency();
+        $seen = SudemiCurrency::seenBySudemi($declared);
+        $warnings = [];
+        if (!SudemiCurrency::isSupported($declared)) {
+            $warnings[] = sprintf(
+                $this->l('sudemi does not take payments in %1$s, so your products are not shown to buyers. sudemi takes these currencies: %2$s. Choose one of them as the default currency of this shop, then send the catalogue again.'),
+                $declared,
+                implode(', ', SudemiCurrency::SUPPORTED)
+            );
+        } elseif ($seen !== $declared) {
+            $warnings[] = sprintf(
+                $this->l('This shop now sells in %1$s, but sudemi still has %2$s. Send the catalogue again so buyers see the right prices.'),
+                $declared,
+                $seen
+            );
+        }
+
+        return [
+            'label' => $this->l('Shop currency'),
+            'code' => $seen,
+            'help' => $this->l('Buyers pay in this currency, and the orders sudemi sends you are in it. Your payout from sudemi is in euros; for any other currency the card company takes a conversion fee of about 2 percent from your payout.'),
+            'warnings' => $warnings,
+        ];
     }
 
     /** sudemi refused this site as not being the connected shop: what it means and what to do. */
@@ -1028,6 +1076,7 @@ class Sudemi extends Module
             'sudemi_carriers' => SudemiShipping::activeCarriers(),
             'sudemi_chosen_carriers' => SudemiShipping::chosenCarriers(),
             'sudemi_history' => $connected ? $this->orderHistory() : null,
+            'sudemi_currency' => $connected ? $this->currencySection() : null,
             'sudemi_support' => $connected ? $this->supportSection() : null,
             'sudemi_requests' => $connected ? $this->requestSection() : null,
             'sudemi_rq_action' => $this->requestFormUrl(),

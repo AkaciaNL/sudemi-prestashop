@@ -396,6 +396,11 @@ On the heartbeat, because that is the only channel to a plugin (§3a). The respo
 `external_id` is the shop's own product id, so the plugin can look the item up in its own
 catalogue without storing a mapping. At most 25 ride on one beat; the rest arrive on the next.
 
+`currency_code` is the shop's currency on sudemi (supported: EUR, PLN, CZK, HUF, RON, SEK, DKK,
+CHF, GBP, NOK, TRY); amounts are in that currency's own ISO 4217 minor units, never a fixed x100.
+Book the local order in that currency; decline an order whose `currency_code` is not the shop's
+currency or not enabled in the shop, rather than booking it in another one.
+
 `shipping_minor` and each line's `unit_price_minor` are what the buyer paid, VAT included, in the
 order's currency: `total_minor` is the sum of `unit_price_minor` x `quantity` over the lines plus
 `shipping_minor`. **Book the local order at these amounts, not at the shop's current catalogue
@@ -497,7 +502,7 @@ array are `{"externalId", "reason"}`). Unknown request fields are ignored.
 | `GET /orders?status=&limit=&after=` | - | `counts`, `orders[{order_id,status,placed_at,total_minor,currency_code,your_net_minor,lines[{title,quantity}],respond_by?,declined_reason?,customer_request?,customer_name?}]`, `next_cursor` (only when there is a next page) |
 | `GET /orders/{id}/fulfilment` | - | `deliverable`, `ship_to{recipient_name,line1,line2,postal_code,city,region,country,phone}`, `lines[{product_id,external_id,title,quantity}]`; 409 `not_confirmed_yet`, `payment_pending`, `not_payable` |
 | `POST /orders/{id}/shipped` / `delivered` | shipped: `carrier`, `trackingCode` (optional, max 100 chars each) | `status: ok` / `already_resolved`; 409 `not_paid` |
-| `POST /orders/{id}/refund` | `amountMinor` (omit for the rest), `reason` | `orderId`, `refundedMinor`, `totalRefundedMinor`, `fullyRefunded`, `providerRefundId`; 409 `refused`; 502 `provider_refused`. Send `Idempotency-Key` (any unique string, max 255): a retry with the same key and body returns the first answer and moves no money (24 h); without it a repeated partial refund refunds again |
+| `POST /orders/{id}/refund` | `amountMinor` (omit for the rest, in the order's currency), `reason`, `currency` (the order's currency; the module does not send a refund in another currency) | `orderId`, `refundedMinor`, `totalRefundedMinor`, `fullyRefunded`, `providerRefundId`; 409 `refused`; 502 `provider_refused`. Send `Idempotency-Key` (any unique string, max 255): a retry with the same key and body returns the first answer and moves no money (24 h); without it a repeated partial refund refunds again |
 | `POST /orders/{id}/cancel` | `reason` (and `Idempotency-Key` as for refund) | as refund, plus `status: CANCELLED`; only a PAID order that has not shipped |
 | `POST /orders/{id}/request/accept` / `request/reject` | reject needs `reason` (shown to the buyer) | `status: ok` / `already_resolved`; 400 `invalid_request` (no reason); 404 `not_found` (no open request) |
 | `POST /credentials/rotate` | `publicKey` (new Ed25519, base64 X.509) | `status: rotated`, `previous_key_valid_until` (old key valid 10 more minutes) |

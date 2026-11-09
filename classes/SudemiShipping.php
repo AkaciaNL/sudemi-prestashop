@@ -110,7 +110,7 @@ class SudemiShipping
     {
         $rates = [];
         foreach (self::cheapestPerCountry($product, $priceTaxIncl) as $iso => $pick) {
-            $rates[] = ['country' => $iso, 'costMinor' => (int) round($pick['cost'] * 100)];
+            $rates[] = ['country' => $iso, 'costMinor' => SudemiCurrency::toMinor($pick['cost'], SudemiSync::currency())];
         }
 
         return $rates;
@@ -121,7 +121,7 @@ class SudemiShipping
     {
         $out = [];
         foreach (self::cheapestPerCountry($product, $priceTaxIncl) as $iso => $pick) {
-            $out[] = ['country' => $iso, 'costMinor' => (int) round($pick['cost'] * 100), 'carrier' => $pick['carrier']];
+            $out[] = ['country' => $iso, 'costMinor' => SudemiCurrency::toMinor($pick['cost'], SudemiSync::currency()), 'carrier' => $pick['carrier']];
         }
 
         return $out;
