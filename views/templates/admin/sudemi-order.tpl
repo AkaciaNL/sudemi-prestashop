@@ -104,6 +104,16 @@
         <button type="submit" name="sudemi_do" value="shipped" class="btn btn-primary">{$sudemi_t.do_shipped|escape:'html':'UTF-8'}</button>
       </form>
     {/if}
+    {if !empty($o.can.update_tracking)}
+      <form method="post" action="{$sudemi.action_url|escape:'html':'UTF-8'}" class="well form-inline" id="sudemi-update-tracking">
+        <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
+        <p class="help-block">{$sudemi_t.update_tracking_help|escape:'html':'UTF-8'}</p>
+        <label>{$sudemi_t.carrier|escape:'html':'UTF-8'} <input type="text" name="sudemi_carrier" maxlength="100" class="form-control" list="sudemi-carrier-list-t" value="{$o.tracking_carrier|escape:'html':'UTF-8'}" /></label>
+        <label>{$sudemi_t.tracking_code|escape:'html':'UTF-8'} <input type="text" name="sudemi_tracking" maxlength="100" required class="form-control" value="{$o.tracking_code|escape:'html':'UTF-8'}" /></label>
+        <datalist id="sudemi-carrier-list-t">{foreach from=$sudemi.carriers item=c}<option value="{$c|escape:'html':'UTF-8'}"></option>{/foreach}</datalist>
+        <button type="submit" name="sudemi_do" value="update_tracking" class="btn btn-default">{$sudemi_t.do_update_tracking|escape:'html':'UTF-8'}</button>
+      </form>
+    {/if}
     {if !empty($o.can.delivered)}
       <form method="post" action="{$sudemi.action_url|escape:'html':'UTF-8'}" style="display:inline-block;margin-right:1em">
         <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />

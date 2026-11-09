@@ -1,7 +1,9 @@
 {*
  * The sudemi block on PrestaShop's order page: the state on sudemi as last applied, a link to the
- * sudemi order page, and "Send tracking to sudemi" (posted to the sudemi orders page, which checks
- * the employee's permission and the CSRF token before anything is sent).
+ * sudemi order page, and "Send tracking to sudemi" while sudemi has the order as paid or shipped
+ * (posted to the sudemi orders page, which checks the employee's permission and the CSRF token
+ * before anything is sent; paid: sent as shipped with the tracking, shipped: the tracking is
+ * corrected).
  *
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}

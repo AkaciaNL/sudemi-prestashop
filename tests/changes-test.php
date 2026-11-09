@@ -15,6 +15,18 @@
 declare(strict_types=1);
 
 define( '_PS_VERSION_', 'test' );
+
+/** Stands in for the signed client: records each POST and answers with the next queued answer. */
+class SudemiClient {
+	public static $calls   = array();
+	public static $answers = array();
+
+	public static function postSigned( $path, array $body = array() ) {
+		self::$calls[] = array( $path, $body );
+		return array_shift( self::$answers );
+	}
+}
+
 require __DIR__ . '/../classes/SudemiCurrency.php';
 require __DIR__ . '/../classes/SudemiRequests.php';
 require __DIR__ . '/../classes/SudemiManage.php';
@@ -112,6 +124,73 @@ check( 'an order page becomes the heartbeat\'s pending-order shape (lines, money
 	&& 695 === $pending['shipping_minor'] && 3195 === $pending['total_minor'] && 'DE' === $pending['destination_country'] && 'EUR' === $pending['currency_code'], $pending );
 check( 'and the paid amounts read from it as from a heartbeat', array( 'shipping' => 695, 'lines' => array( 1250 ), 'total' => 3195 ) === SudemiOrders::paidAmounts( $pending ) );
 check( 'an order page without lines is not booked', null === SudemiOrders::pendingFromDetail( array( 'order_id' => $id, 'money' => array() ) ) );
+
+// ---- tracking after shipping (core 2026-11-09, POST /orders/{id}/tracking) ----
+check( 'a tracking number added after shipping is sent', 'send' === SudemiOrders::trackingAction( 'JJD2', 'SHIPPED', 'DHL JJD1', true, false ) );
+check( 'also while the module still holds the order as paid on sudemi (the change feed has not said shipped yet)',
+	'send' === SudemiOrders::trackingAction( 'JJD2', 'PAID', '', true, false ) );
+check( 'not before the order is shipped here (the shipped report carries it)', null === SudemiOrders::trackingAction( 'JJD2', 'PAID', '', false, false ) );
+check( 'not when sudemi already has this number (it came from sudemi, or was sent before)',
+	null === SudemiOrders::trackingAction( 'JJD1', 'SHIPPED', 'DHL JJD1', true, false ) && null === SudemiOrders::trackingAction( 'JJD1', 'SHIPPED', 'JJD1', true, false ) );
+check( 'a carrier with spaces: the code is the last word', null === SudemiOrders::trackingAction( '3S1', 'SHIPPED', 'Post NL 3S1', true, false ) );
+check( 'a number that only ends like sudemi\'s is new', 'send' === SudemiOrders::trackingAction( 'S1', 'SHIPPED', 'PostNL 3S1', true, false ) );
+foreach ( array( 'DELIVERED', 'CANCELLED', 'REFUNDED', 'DECLINED' ) as $s ) {
+	check( "not when sudemi has the order $s (final there)", null === SudemiOrders::trackingAction( 'JJD2', $s, 'DHL JJD1', true, false ) );
+}
+check( 'no number: nothing', null === SudemiOrders::trackingAction( '  ', 'SHIPPED', '', true, false ) );
+check( 'a shipped report still waiting for a retry carries the new number instead', 'queued' === SudemiOrders::trackingAction( 'JJD2', 'PAID', '', true, true ) );
+check( 'tracking body: blank carrier left out (sudemi keeps its own), at most 100 characters',
+	array( 'carrier' => null, 'trackingCode' => str_repeat( 'x', 100 ) ) === SudemiOrders::trackingBody( '  ', str_repeat( 'x', 120 ) ) );
+
+$ans = function ( int $status, array $body ) { return array( 'status' => $status, 'body' => $body, 'retry_after' => 0 ); };
+check( 'tracking 200 ok: updated', 'updated' === SudemiOrders::trackingOutcome( $ans( 200, array( 'status' => 'ok' ) ) ) );
+check( 'tracking 200 already_resolved: unchanged', 'unchanged' === SudemiOrders::trackingOutcome( $ans( 200, array( 'status' => 'already_resolved' ) ) ) );
+check( 'tracking 409 not_shipped: try shipped', 'not_shipped' === SudemiOrders::trackingOutcome( $ans( 409, array( 'error' => 'not_shipped' ) ) ) );
+check( 'tracking 409 site_mismatch, 503, 429, no answer: retry',
+	'retry' === SudemiOrders::trackingOutcome( $ans( 409, array( 'error' => 'site_mismatch' ) ) ) && 'retry' === SudemiOrders::trackingOutcome( $ans( 503, array() ) )
+	&& 'retry' === SudemiOrders::trackingOutcome( $ans( 429, array() ) ) && 'retry' === SudemiOrders::trackingOutcome( null ) );
+check( 'tracking 400 tracking_code_required, 404 no_such_order: refused',
+	'refused' === SudemiOrders::trackingOutcome( $ans( 400, array( 'error' => 'tracking_code_required' ) ) ) && 'refused' === SudemiOrders::trackingOutcome( $ans( 404, array( 'error' => 'no_such_order' ) ) ) );
+check( 'shipped after not_shipped, 200 ok: sudemi had it paid, now shipped', 'shipped' === SudemiOrders::shippedFallbackOutcome( $ans( 200, array( 'status' => 'ok' ) ) ) );
+check( 'shipped after not_shipped, already_resolved: delivered, cancelled or refunded, final', 'final' === SudemiOrders::shippedFallbackOutcome( $ans( 200, array( 'status' => 'already_resolved' ) ) ) );
+check( 'shipped after not_shipped, 409 not_paid: retry (as every shipped report)', 'retry' === SudemiOrders::shippedFallbackOutcome( $ans( 409, array( 'error' => 'not_paid' ) ) ) );
+
+// sendTracking against a stand-in sudemi: the calls it makes and what they mean.
+SudemiClient::$answers = array( $ans( 200, array( 'status' => 'ok' ) ) );
+$r = SudemiOrders::sendTracking( strtoupper( $id ), array( 'carrier' => 'DHL', 'trackingCode' => 'JJD2' ) );
+check( 'a SHIPPED order: one tracking call, updated',
+	'updated' === $r['outcome'] && array( array( '/integration/v1/orders/' . $id . '/tracking', array( 'carrier' => 'DHL', 'trackingCode' => 'JJD2' ) ) ) === SudemiClient::$calls, SudemiClient::$calls );
+SudemiClient::$calls = array();
+SudemiClient::$answers = array( $ans( 409, array( 'error' => 'not_shipped' ) ), $ans( 200, array( 'status' => 'ok' ) ) );
+$r = SudemiOrders::sendTracking( $id, array( 'carrier' => null, 'trackingCode' => 'JJD2' ) );
+check( 'a PAID order: tracking answers not_shipped, then shipped with the same tracking',
+	'shipped' === $r['outcome'] && 2 === count( SudemiClient::$calls ) && '/integration/v1/orders/' . $id . '/shipped' === SudemiClient::$calls[1][0]
+	&& array( 'carrier' => null, 'trackingCode' => 'JJD2' ) === SudemiClient::$calls[1][1], SudemiClient::$calls );
+SudemiClient::$calls = array();
+SudemiClient::$answers = array( $ans( 409, array( 'error' => 'not_shipped' ) ), $ans( 200, array( 'status' => 'already_resolved' ) ) );
+check( 'a DELIVERED order: not_shipped, then already_resolved: final', 'final' === SudemiOrders::sendTracking( $id, array( 'trackingCode' => 'JJD2' ) )['outcome'] );
+SudemiClient::$calls = array();
+SudemiClient::$answers = array( null );
+check( 'sudemi unreachable: retry, nothing more sent', 'retry' === SudemiOrders::sendTracking( $id, array( 'trackingCode' => 'JJD2' ) )['outcome'] && 1 === count( SudemiClient::$calls ) );
+SudemiClient::$calls = array();
+check( 'no tracking number: nothing sent', 'required' === SudemiOrders::sendTracking( $id, array( 'carrier' => 'DHL', 'trackingCode' => '' ) )['outcome'] && array() === SudemiClient::$calls );
+check( 'the order page offers "Change tracking" (update_tracking) when sudemi allows it', in_array( 'update_tracking', SudemiManage::ORDER_ACTIONS, true ) );
+
+// ---- who cancelled (cancelled_by on settled_orders and changed_orders) ----
+check( 'cancelled_by buyer: the note says the buyer', 'Cancelled by the buyer on sudemi before shipping; the buyer has been refunded in full. Do not ship this order.' === SudemiOrders::cancelNote( 'buyer' ) );
+check( 'cancelled_by shop: the note says the shop', 'Cancelled by the shop on sudemi before shipping; the buyer has been refunded in full. Do not ship this order.' === SudemiOrders::cancelNote( 'shop' ) );
+check( 'cancelled_by sudemi: the note says sudemi', 'Cancelled by sudemi before shipping; the buyer has been refunded in full. Do not ship this order.' === SudemiOrders::cancelNote( 'sudemi' ) );
+check( 'an older core (no cancelled_by) or an unknown value: neutral, nobody blamed',
+	'note_cancel' === SudemiOrders::cancelNoteKey( null ) && 'note_cancel' === SudemiOrders::cancelNoteKey( 'martian' ) && 'note_cancel_shop' === SudemiOrders::cancelNoteKey( 'SHOP' ) );
+check( 'the buyer note is the one used before 1.3.0', SudemiOrders::BUYER_CANCEL_NOTE === SudemiText::EN['note_cancel_buyer'] );
+check( 'the note in the shop\'s language (German shop: storniert vom Shop)', 'Vom Shop bei sudemi vor dem Versand storniert; der Käufer hat den vollen Betrag zurückerhalten.'
+	=== SudemiText::translate( SudemiText::EN['note_cancel_shop'], 'de' ) );
+check( 'translate: English and an unknown language give the English text',
+	SudemiText::EN['note_cancel'] === SudemiText::translate( SudemiText::EN['note_cancel'], 'en' ) && SudemiText::EN['note_cancel'] === SudemiText::translate( SudemiText::EN['note_cancel'], 'xx' ) );
+check( 'translate: a text with an apostrophe is found (PrestaShop\'s key escapes it)',
+	SudemiText::EN['ship_mode_shop'] !== SudemiText::translate( SudemiText::EN['ship_mode_shop'], 'nl' ) );
+$e = SudemiChanges::entryOf( array( 'order_id' => $id, 'status' => 'CANCELLED', 'revision' => 5, 'cancelled_by' => 'shop' ) );
+check( 'a change entry keeps cancelled_by', 'shop' === $e['cancelled_by'] );
 
 // ---- every text in all twelve languages (English is the source) ----
 check( 'the texts include the order page block and the shipping page', isset( SudemiText::EN['do_tracking'], SudemiText::EN['ship_prefill'], SudemiText::EN['payouts_delay'] ) );

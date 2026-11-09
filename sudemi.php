@@ -79,7 +79,47 @@ class Sudemi extends Module
             && $this->registerWithdrawalHooks()
             && $this->registerOrderPageHooks()
             && $this->registerCombinationHooks()
+            && $this->registerTrackingHooks()
             && $this->installTabs();
+    }
+
+    /**
+     * A tracking number added or changed on an order after it was reported shipped (1.3.0): the
+     * shipment line saved (any way: the order page's shipping form, the API, another module) and
+     * the order page's own tracking hook. Shared with upgrade-1.3.0.php.
+     */
+    public function registerTrackingHooks()
+    {
+        return $this->registerHook('actionObjectOrderCarrierUpdateAfter')
+            && $this->registerHook('actionAdminOrdersTrackingNumberUpdate');
+    }
+
+    public function hookActionObjectOrderCarrierUpdateAfter($params)
+    {
+        $line = isset($params['object']) ? $params['object'] : null;
+        if (is_object($line) && !empty($line->id_order)) {
+            $this->trackingChanged((int) $line->id_order);
+        }
+    }
+
+    public function hookActionAdminOrdersTrackingNumberUpdate($params)
+    {
+        if (isset($params['order']) && is_object($params['order']) && !empty($params['order']->id)) {
+            $this->trackingChanged((int) $params['order']->id);
+        }
+    }
+
+    /** Never breaks the merchant's save: a failure is logged, and a failed send is retried. */
+    private function trackingChanged($orderId)
+    {
+        try {
+            $order = new Order($orderId);
+            if (Validate::isLoadedObject($order)) {
+                SudemiOrders::trackingChanged($order);
+            }
+        } catch (\Throwable $e) {
+            SudemiLogger::warn('Could not send the tracking number of order ' . (int) $orderId . ' to sudemi: ' . $e->getMessage());
+        }
     }
 
     /**

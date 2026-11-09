@@ -497,7 +497,7 @@ class SudemiOrders
             }
             $sudemiId = isset($entry['order_id']) ? (string) $entry['order_id'] : '';
             $call = isset($entry['call']) ? (string) $entry['call'] : '';
-            if ($sudemiId === '' || !in_array($call, ['shipped', 'delivered', 'reject'], true)) {
+            if ($sudemiId === '' || !in_array($call, ['shipped', 'delivered', 'reject', 'tracking'], true)) {
                 self::forgetCall($key);
                 continue;
             }
@@ -508,6 +508,15 @@ class SudemiOrders
             }
             ++$sent;
             $body = isset($entry['body']) && is_array($entry['body']) ? $entry['body'] : [];
+            if ($call === 'tracking') {
+                // A tracking number added or changed after shipping (tracking, or shipped while
+                // sudemi still had the order as paid); kept until sudemi answers definitely.
+                $result = self::sendTracking($sudemiId, $body);
+                if ($result['outcome'] !== 'retry') {
+                    self::trackingResult(self::findLocalOrder($sudemiId), $sudemiId, $body, $result, true);
+                }
+                continue;
+            }
             $response = SudemiClient::postSigned('/integration/v1/orders/' . rawurlencode($sudemiId) . '/' . $call, $body);
             if ($call === 'reject') {
                 $outcome = self::rejectOutcome($response);
@@ -530,6 +539,210 @@ class SudemiOrders
                     . (isset($response['body']['message']) ? (string) $response['body']['message'] : 'HTTP ' . (int) $response['status']));
             }
         }
+    }
+
+    // ------------------------------------------------------------ tracking after shipping ----
+
+    /** sudemi statuses after which the tracking number can no longer change. */
+    const TRACKING_FINAL = ['DELIVERED', 'CANCELLED', 'REFUNDED', 'DECLINED'];
+
+    /** Set while a tracking number sudemi sent is written here, so it is never sent back. */
+    public static $applyingTracking = false;
+
+    /** Tracking numbers already sent in this request, per order (the two hooks can both fire). */
+    private static $trackingSent = [];
+
+    /** The body of a tracking or shipped call: carrier (null keeps sudemi's) and tracking number. Pure. */
+    public static function trackingBody($carrier, $code)
+    {
+        $carrier = SudemiManage::text($carrier, 100);
+
+        return ['carrier' => $carrier === '' ? null : $carrier, 'trackingCode' => SudemiManage::text($code, 100)];
+    }
+
+    /**
+     * Whether sudemi already has this tracking number. The module keeps sudemi's tracking as
+     * "carrier code" (the order page shows it so), so the code is the last word of it. Pure.
+     */
+    public static function sameTracking($stored, $code)
+    {
+        $stored = trim((string) $stored);
+        $code = trim((string) $code);
+        if ($code === '' || $stored === '') {
+            return false;
+        }
+
+        return $stored === $code || substr($stored, -strlen($code) - 1) === ' ' . $code;
+    }
+
+    /**
+     * What a tracking number added or changed on a PrestaShop order asks for: 'send', 'queued'
+     * (a shipped report for the order is still waiting for a retry: it carries the new number
+     * instead) or null (nothing to send). Pure.
+     *
+     * Only for an order already shipped here: before that the shipped report carries the number.
+     * Not for an order sudemi has as delivered, cancelled or refunded (final there), and not when
+     * sudemi already has this number (it came from sudemi, or was sent before).
+     */
+    public static function trackingAction($code, $sudemiStatus, $sudemiTracking, $shippedHere, $shippedQueued)
+    {
+        if (trim((string) $code) === '' || !$shippedHere) {
+            return null;
+        }
+        if (in_array((string) $sudemiStatus, self::TRACKING_FINAL, true)) {
+            return null;
+        }
+        if (self::sameTracking($sudemiTracking, $code)) {
+            return null;
+        }
+
+        return $shippedQueued ? 'queued' : 'send';
+    }
+
+    /**
+     * What the answer to POST /orders/{id}/tracking means: 'updated', 'unchanged' (sudemi already
+     * had exactly this tracking), 'not_shipped' (409: sudemi does not have the order as shipped),
+     * 'retry' or 'refused' (as callOutcome). Pure.
+     */
+    public static function trackingOutcome($response)
+    {
+        if (is_array($response) && (int) $response['status'] === 200) {
+            return isset($response['body']['status']) && $response['body']['status'] === 'already_resolved' ? 'unchanged' : 'updated';
+        }
+        if (is_array($response) && (int) $response['status'] === 409 && isset($response['body']['error'])
+            && $response['body']['error'] === 'not_shipped') {
+            return 'not_shipped';
+        }
+
+        return self::callOutcome($response);
+    }
+
+    /**
+     * What the answer to the shipped call sent after a 409 not_shipped means: 'shipped' (sudemi
+     * had the order as paid: now shipped with this tracking), 'final' (already_resolved: delivered,
+     * cancelled or refunded on sudemi, the tracking cannot change any more), else as callOutcome
+     * (409 not_paid is a retry, as for every shipped report). Pure.
+     */
+    public static function shippedFallbackOutcome($response)
+    {
+        if (is_array($response) && (int) $response['status'] === 200) {
+            return isset($response['body']['status']) && $response['body']['status'] === 'already_resolved' ? 'final' : 'shipped';
+        }
+
+        return self::callOutcome($response);
+    }
+
+    /**
+     * Sends a tracking number for an order sudemi has as paid or shipped: the tracking call (for
+     * a shipped order), and on 409 not_shipped the shipped call with the same tracking (for a paid
+     * order; a delivered, cancelled or refunded one answers already_resolved, which is final).
+     *
+     * @return array{outcome:string,response:mixed} outcome: updated, unchanged, shipped, final, refused, retry
+     */
+    public static function sendTracking($sudemiId, array $body)
+    {
+        $path = '/integration/v1/orders/' . rawurlencode(strtolower((string) $sudemiId));
+        if (!isset($body['trackingCode']) || trim((string) $body['trackingCode']) === '') {
+            return ['outcome' => 'required', 'response' => null];
+        }
+        $response = SudemiClient::postSigned($path . '/tracking', $body);
+        $outcome = self::trackingOutcome($response);
+        if ($outcome !== 'not_shipped') {
+            return ['outcome' => $outcome, 'response' => $response];
+        }
+        $response = SudemiClient::postSigned($path . '/shipped', $body);
+
+        return ['outcome' => self::shippedFallbackOutcome($response), 'response' => $response];
+    }
+
+    /**
+     * A tracking number was added or changed on a PrestaShop order (the order page's shipping
+     * form, or anything else that saves the shipment line): sent to sudemi when the order was
+     * already reported shipped, so sudemi tells the buyer the new number. A failed send is kept
+     * on the retry list. Never for a number that came from sudemi.
+     *
+     * @param Order $order
+     */
+    public static function trackingChanged($order)
+    {
+        if (self::$changingState || self::$applyingTracking || !is_object($order) || empty($order->id)) {
+            return;
+        }
+        $sudemiId = self::sudemiIdOf($order);
+        if ($sudemiId === null) {
+            return;
+        }
+        $code = trim(SudemiChanges::trackingOf($order));
+        if ($code === '' || (isset(self::$trackingSent[(int) $order->id]) && self::$trackingSent[(int) $order->id] === $code)) {
+            return;
+        }
+        $row = Db::getInstance()->getRow('SELECT sudemi_status, tracking FROM `' . _DB_PREFIX_ . 'sudemi_order` WHERE id_order = ' . (int) $order->id);
+        $calls = self::calls();
+        $action = self::trackingAction(
+            $code,
+            is_array($row) ? (string) $row['sudemi_status'] : '',
+            is_array($row) ? (string) $row['tracking'] : '',
+            $order->hasBeenShipped(),
+            isset($calls[$sudemiId . '|shipped'])
+        );
+        if ($action === null) {
+            return;
+        }
+        self::$trackingSent[(int) $order->id] = $code;
+        $carrier = new Carrier((int) $order->id_carrier);
+        $body = self::trackingBody(Validate::isLoadedObject($carrier) ? (string) $carrier->name : '', $code);
+        if ($action === 'queued') {
+            // sudemi does not have the shipment yet: the waiting shipped report carries the new number.
+            self::queueCall($sudemiId, 'shipped', $body);
+            SudemiLogger::info('New tracking number for sudemi order ' . $sudemiId . ' added to the shipped report waiting for a retry.');
+
+            return;
+        }
+        self::trackingResult($order, $sudemiId, $body, self::sendTracking($sudemiId, $body), false);
+    }
+
+    /**
+     * Records the answer to a tracking send: sudemi's tracking kept (so it is not sent again),
+     * a retry queued, or a refusal logged.
+     *
+     * @param Order|null $order
+     * @param bool       $fromQueue whether the send came from the retry list (it is then removed or kept there)
+     */
+    public static function trackingResult($order, $sudemiId, array $body, array $result, $fromQueue)
+    {
+        $outcome = $result['outcome'];
+        $response = $result['response'];
+        $code = isset($body['trackingCode']) ? (string) $body['trackingCode'] : '';
+        if ($outcome === 'retry') {
+            self::queueCall($sudemiId, 'tracking', $body);
+            SudemiLogger::warn('Could not send the tracking number for sudemi order ' . $sudemiId
+                . (is_array($response) ? ' (HTTP ' . (int) $response['status'] . ')' : '') . '; will try again on the next heartbeat.');
+
+            return;
+        }
+        self::forgetCall($sudemiId . '|tracking');
+        if (in_array($outcome, ['updated', 'unchanged', 'shipped'], true)) {
+            if ($order) {
+                $fields = ['tracking' => pSQL(Tools::substr(trim((isset($body['carrier']) ? (string) $body['carrier'] : '') . ' ' . $code), 0, 255))];
+                if ($outcome === 'shipped') {
+                    $fields['sudemi_status'] = 'SHIPPED';
+                }
+                Db::getInstance()->update('sudemi_order', $fields, 'id_order = ' . (int) $order->id);
+            }
+            SudemiLogger::info(($outcome === 'unchanged' ? 'sudemi already had' : 'Sent') . ' tracking number ' . $code . ' for sudemi order ' . $sudemiId
+                . ($outcome === 'shipped' ? ' (reported as shipped with it)' : '') . ($fromQueue ? ' (retried).' : '.'));
+
+            return;
+        }
+        if ($outcome === 'final') {
+            SudemiLogger::warn('sudemi has order ' . $sudemiId . ' as delivered, cancelled or refunded, so tracking number '
+                . $code . ' was not sent: it can no longer be changed there.');
+
+            return;
+        }
+        SudemiLogger::error('sudemi refused the tracking number for order ' . $sudemiId . ': '
+            . (is_array($response) && isset($response['body']['message']) ? (string) $response['body']['message']
+                : (is_array($response) ? 'HTTP ' . (int) $response['status'] : 'no tracking number')));
     }
 
     /**
@@ -1004,6 +1217,25 @@ class SudemiOrders
     const BUYER_CANCEL_NOTE = 'Cancelled by the buyer on sudemi before shipping; the buyer has been refunded in full.';
 
     /**
+     * The SudemiText key of the note on an order cancelled on sudemi, by who cancelled it
+     * (cancelled_by: buyer, shop or sudemi; core 2026-11-09). An older core says nothing: the
+     * note then says only that it was cancelled on sudemi. Pure.
+     */
+    public static function cancelNoteKey($cancelledBy)
+    {
+        $by = is_string($cancelledBy) ? strtolower($cancelledBy) : '';
+
+        return in_array($by, ['buyer', 'shop', 'sudemi'], true) ? 'note_cancel_' . $by : 'note_cancel';
+    }
+
+    /** The cancel note in the shop's language, ending with "Do not ship this order.". */
+    public static function cancelNote($cancelledBy)
+    {
+        return SudemiText::forShop(SudemiText::EN[self::cancelNoteKey($cancelledBy)]) . ' '
+            . SudemiText::forShop(SudemiText::EN['note_do_not_ship']);
+    }
+
+    /**
      * What one settled_orders entry asks of the local order: 'pay', 'release', 'buyer_cancel', or
      * null (nothing to do). Pure, so it can be tested without PrestaShop.
      *
@@ -1077,9 +1309,11 @@ class SudemiOrders
             // The money is already back with the buyer (sudemi refunded it), so this only stops
             // the shipment and restocks. setState marks the change as the module's own, so the
             // status hook does not send a /cancel (or /refund) back to sudemi for it.
+            // The note says who cancelled: the buyer, the shop (portal, seller API, this module) or sudemi.
             self::setState($order, (int) Configuration::get('PS_OS_CANCELED'));
-            self::note($order, self::BUYER_CANCEL_NOTE);
-            self::privateMessage($order, self::BUYER_CANCEL_NOTE);
+            $by = isset($settled['cancelled_by']) ? $settled['cancelled_by'] : null;
+            self::note($order, SudemiText::EN[self::cancelNoteKey($by)]);
+            self::privateMessage($order, self::cancelNote($by));
 
             return;
         }
@@ -1277,6 +1511,12 @@ class SudemiOrders
         }
         // A newer report supersedes one still waiting for the same event.
         self::forgetCall($sudemiId . '|' . $event);
+        if ($event === 'shipped' && !empty($body['trackingCode'])) {
+            // sudemi has this tracking number now: not sent again when the shipment line is saved.
+            Db::getInstance()->update('sudemi_order', [
+                'tracking' => pSQL(Tools::substr(trim((string) $body['carrier'] . ' ' . (string) $body['trackingCode']), 0, 255)),
+            ], 'id_order = ' . (int) $order->id);
+        }
         SudemiLogger::info('Reported ' . $event . ' for sudemi order ' . $sudemiId . '.');
     }
 

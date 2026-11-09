@@ -204,6 +204,21 @@ class SudemiChanges
             }
         }
         $status = (string) $entry['status'];
+        // What is written here came from sudemi: a shipment line saved on the way is not sent back.
+        SudemiOrders::$applyingTracking = true;
+        try {
+            self::applySteps($order, $sudemiId, $status, $steps, $entry);
+        } finally {
+            SudemiOrders::$applyingTracking = false;
+        }
+        self::remember($order, $entry);
+        if (count($steps) > 1) {
+            SudemiLogger::info(sprintf('sudemi order %s is %s on sudemi; order %s updated.', $sudemiId, $status, $order->reference));
+        }
+    }
+
+    private static function applySteps($order, $sudemiId, $status, array $steps, array $entry)
+    {
         foreach ($steps as $step) {
             switch ($step) {
                 case 'pay':
@@ -215,7 +230,8 @@ class SudemiChanges
                     break;
                 case 'cancel':
                     SudemiOrders::setState($order, (int) Configuration::get('PS_OS_CANCELED'));
-                    SudemiOrders::privateMessage($order, 'Cancelled on sudemi; any payment was refunded to the buyer in full. Do not ship this order.');
+                    // Who cancelled (buyer, shop or sudemi), when sudemi says so.
+                    SudemiOrders::privateMessage($order, SudemiOrders::cancelNote(isset($entry['cancelled_by']) ? $entry['cancelled_by'] : null));
                     break;
                 case 'ship':
                     SudemiOrders::setState($order, (int) Configuration::get('PS_OS_SHIPPING'));
@@ -227,6 +243,11 @@ class SudemiChanges
                     SudemiOrders::setState($order, (int) Configuration::get('PS_OS_REFUND'));
                     break;
                 case 'tracking':
+                    $calls = SudemiOrders::calls();
+                    if (isset($calls[$sudemiId . '|tracking'])) {
+                        // A newer number typed here is still on its way to sudemi: kept.
+                        break;
+                    }
                     self::setTracking($order, isset($entry['tracking']['carrier']) ? (string) $entry['tracking']['carrier'] : '',
                         (string) $entry['tracking']['code']);
                     break;
@@ -237,10 +258,6 @@ class SudemiChanges
                         SudemiCurrency::format((int) SudemiCurrency::toMinor($order->total_paid_tax_incl, $currency), $currency)));
                     break;
             }
-        }
-        self::remember($order, $entry);
-        if (count($steps) > 1) {
-            SudemiLogger::info(sprintf('sudemi order %s is %s on sudemi; order %s updated.', $sudemiId, $status, $order->reference));
         }
     }
 
@@ -322,14 +339,16 @@ class SudemiChanges
     /**
      * Applies what sudemi answers for one order now (after an action from the back office), so
      * the local order shows sudemi's answer at once instead of on the next heartbeat.
+     *
+     * @param array $known what the caller knows and the order page does not say (cancelled_by)
      */
-    public static function refresh($sudemiId)
+    public static function refresh($sudemiId, array $known = [])
     {
         $detail = SudemiManage::order($sudemiId);
         if (!$detail['ok']) {
             return null;
         }
-        self::apply(self::entryOf($detail['order']));
+        self::apply($known + self::entryOf($detail['order']));
 
         return $detail['order'];
     }
@@ -346,6 +365,7 @@ class SudemiChanges
             'revision' => isset($order['revision']) ? $order['revision'] : null,
             'refunded_minor' => (int) $refunded,
             'tracking' => isset($order['tracking']) && is_array($order['tracking']) ? $order['tracking'] : null,
+            'cancelled_by' => isset($order['cancelled_by']) && is_string($order['cancelled_by']) ? $order['cancelled_by'] : null,
         ];
     }
 

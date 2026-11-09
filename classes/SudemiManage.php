@@ -19,7 +19,7 @@ class SudemiManage
     const SORTS = ['placed', 'total', 'status'];
     const LANGUAGES = ['en', 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he'];
     const BULK_ACTIONS = ['accept', 'reject', 'shipped', 'delivered'];
-    const ORDER_ACTIONS = ['accept', 'reject', 'shipped', 'delivered', 'refund', 'cancel', 'request_accept', 'request_reject'];
+    const ORDER_ACTIONS = ['accept', 'reject', 'shipped', 'update_tracking', 'delivered', 'refund', 'cancel', 'request_accept', 'request_reject'];
     const PAGE_SIZE = 25;
     const BULK_MAX = 100;
     const MAX_TEXT = 500;
@@ -209,6 +209,10 @@ class SudemiManage
                 }
                 $body['reason'] = $reason;
                 break;
+            case 'update_tracking':
+                // POST /orders/{id}/tracking (protocol 4d): a blank carrier keeps sudemi's.
+                $path = 'tracking';
+                // fall through
             case 'shipped':
                 $body['carrier'] = self::text(isset($params['carrier']) ? $params['carrier'] : '', 100);
                 $body['trackingCode'] = self::text(isset($params['trackingCode']) ? $params['trackingCode'] : '', 100);

@@ -478,6 +478,8 @@ class SudemiAdminPages
             'currency' => $currency,
             'events' => $events,
             'can_track' => $status === 'PAID',
+            'tracking_carrier' => isset($o['tracking']['carrier']) ? (string) $o['tracking']['carrier'] : '',
+            'tracking_code' => isset($o['tracking']['code']) ? (string) $o['tracking']['code'] : '',
         ];
     }
 
@@ -531,8 +533,33 @@ class SudemiAdminPages
                     $this->say('warning', $this->t['err_already_resolved']);
                 }
                 break;
-            case 'shipped':
             case 'tracking':
+            case 'update_tracking':
+                // "Send tracking to sudemi" (PrestaShop's order page) and "Change tracking": the
+                // tracking call for an order sudemi has as shipped, the shipped call (with the
+                // tracking) for one it has as paid.
+                $result = SudemiOrders::sendTracking($sudemiId, SudemiOrders::trackingBody(
+                    isset($post['sudemi_carrier']) ? $post['sudemi_carrier'] : '',
+                    isset($post['sudemi_tracking']) ? $post['sudemi_tracking'] : ''
+                ));
+                $outcome = $result['outcome'];
+                if (in_array($outcome, ['updated', 'shipped'], true)) {
+                    $this->say('success', $this->t['done_tracking']);
+                } elseif ($outcome === 'unchanged') {
+                    $this->say('info', $this->t['tracking_same']);
+                } elseif ($outcome === 'final') {
+                    $this->say('warning', $this->t['err_tracking_late']);
+                } elseif ($outcome === 'required') {
+                    $this->say('error', $this->t['tracking_required']);
+                } elseif ($outcome === 'retry') {
+                    $this->say('error', $this->t['unreachable']);
+                } else {
+                    $response = $result['response'];
+                    $this->say('error', sprintf($this->t['err_refused'], is_array($response) && isset($response['body']['message'])
+                        ? (string) $response['body']['message'] : SudemiManage::error($response)));
+                }
+                break;
+            case 'shipped':
             case 'delivered':
             case 'refund':
             case 'cancel':
@@ -557,11 +584,17 @@ class SudemiAdminPages
                     $this->say('error', $this->t['reason_required']);
                     break;
                 }
-                $answer = SudemiManage::action($sudemiId, $action === 'tracking' ? 'shipped' : $action, $params);
+                $answer = SudemiManage::action($sudemiId, $action, $params);
                 if ($answer['ok']) {
-                    $this->say('success', $this->t['done_' . ($action === 'tracking' ? 'tracking' : $action)]);
+                    $this->say('success', $this->t['done_' . $action]);
+                    if ($action === 'cancel') {
+                        // Cancelled by this shop: the note on the PrestaShop order says so.
+                        SudemiChanges::refresh($sudemiId, ['cancelled_by' => 'shop']);
+
+                        return;
+                    }
                 } elseif ($answer['error'] === 'already_resolved') {
-                    $this->say('warning', $action === 'tracking' ? $this->t['err_tracking_late'] : $this->t['err_already_resolved']);
+                    $this->say('warning', $this->t['err_already_resolved']);
                 } elseif ($answer['error'] === 'unreachable') {
                     $this->say('error', $this->t['unreachable']);
                 } elseif ($answer['error'] === 'reason_required') {
@@ -747,7 +780,8 @@ class SudemiAdminPages
 
     /**
      * The sudemi block on PrestaShop's order page: the state on sudemi as last applied (no call to
-     * sudemi while the page loads), a link to the sudemi order page and "Send tracking to sudemi".
+     * sudemi while the page loads), a link to the sudemi order page and "Send tracking to sudemi"
+     * (while sudemi has the order as paid or shipped).
      *
      * @return array|null null for an order that did not come through sudemi
      */
@@ -771,7 +805,8 @@ class SudemiAdminPages
             'carrier' => Validate::isLoadedObject($carrier) ? (string) $carrier->name : '',
             'tracking_code' => SudemiChanges::trackingOf($order) ?: (string) $order->getWsShippingNumber(),
             'token' => self::csrf(self::ORDERS),
-            'can_track' => $status === '' || $status === 'PAID',
+            // Paid: sent as shipped with the tracking; shipped: the tracking is corrected.
+            'can_track' => in_array($status, ['', 'PAID', 'SHIPPED'], true),
         ];
     }
 

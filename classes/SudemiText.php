@@ -1,6 +1,7 @@
 <?php
 /**
- * The texts of the sudemi Orders and Shipping pages and of the order page block, in English.
+ * The texts of the sudemi Orders and Shipping pages, of the order page block and of the notes the
+ * module writes on PrestaShop orders, in English.
  *
  * Translated with PrestaShop's module translations (translations/<iso>.php, source "sudemi"),
  * like every other text of this module: Module::l() looks each one up in the employee's
@@ -171,7 +172,7 @@ class SudemiText
         'no_actions' => 'Nothing to do on this order now.',
         'refund_help' => 'Up to %s can still be refunded. sudemi pays it back to the buyer from the payment it holds.',
         'cancel_help' => 'Cancels the order and refunds the buyer in full. Only before shipping.',
-        'tracking_help' => 'sudemi tells the buyer. A tracking number can be sent until the order is shipped on sudemi; after that it cannot be changed.',
+        'tracking_help' => 'sudemi tells the buyer. You can send the tracking number, and correct it later, until the order is delivered on sudemi.',
         'done_accept' => 'Accepted. The buyer was charged; ship the order.',
         'done_waiting' => 'Accepted. The buyer paid several shops at once: sudemi takes the money once every shop has answered. Do not ship before the order shows Confirmed and charged.',
         'done_reject' => 'Declined. The buyer was not charged.',
@@ -182,7 +183,11 @@ class SudemiText
         'done_request' => 'Your answer was sent to sudemi.',
         'done_tracking' => 'Tracking sent to sudemi; sudemi tells the buyer.',
         'err_already_resolved' => 'sudemi already has a newer state for this order. Nothing was changed; the page shows sudemi\'s state now.',
-        'err_tracking_late' => 'sudemi already has this order as shipped, so the tracking number can no longer be changed there.',
+        'err_tracking_late' => 'This order is already delivered, cancelled or refunded on sudemi, so its tracking number can no longer be changed.',
+        'tracking_same' => 'sudemi already has this tracking number. Nothing was changed.',
+        'tracking_required' => 'Give a tracking number.',
+        'do_update_tracking' => 'Change tracking',
+        'update_tracking_help' => 'Corrects the carrier or tracking number on sudemi. sudemi e-mails the buyer the new tracking number.',
         'err_shortfall' => 'Not accepted, nothing was sent: %s. Decline the order, or make the product available and accept again.',
         'err_amount' => 'Give an amount above zero and at most what can still be refunded.',
         'err_refused' => 'sudemi refused this: %s',
@@ -223,6 +228,12 @@ class SudemiText
         'block_unknown' => 'not known yet (updated with the next heartbeat)',
         'block_tracking' => 'Tracking on sudemi',
         'block_open' => 'Open this order on the sudemi orders page',
+        // notes on the PrestaShop order (in the shop's language)
+        'note_cancel_buyer' => 'Cancelled by the buyer on sudemi before shipping; the buyer has been refunded in full.',
+        'note_cancel_shop' => 'Cancelled by the shop on sudemi before shipping; the buyer has been refunded in full.',
+        'note_cancel_sudemi' => 'Cancelled by sudemi before shipping; the buyer has been refunded in full.',
+        'note_cancel' => 'Cancelled on sudemi before shipping; the buyer has been refunded in full.',
+        'note_do_not_ship' => 'Do not ship this order.',
     ];
 
     /**
@@ -244,6 +255,50 @@ class SudemiText
     public static function one($module, $english)
     {
         return html_entity_decode((string) $module->l($english, 'sudemi'), ENT_QUOTES, 'UTF-8');
+    }
+
+    /** Translations read from translations/<iso>.php, per language. */
+    private static $files = [];
+
+    /**
+     * An English text in another of the module's languages, read from the module's own
+     * translation file (the key PrestaShop uses for it); the English text when there is none.
+     * Pure apart from reading the file.
+     */
+    public static function translate($english, $iso)
+    {
+        $iso = strtolower((string) $iso);
+        if ($iso === 'en' || !preg_match('/^[a-z]{2}$/', $iso)) {
+            return $english;
+        }
+        if (!isset(self::$files[$iso])) {
+            self::$files[$iso] = [];
+            $file = __DIR__ . '/../translations/' . $iso . '.php';
+            if (is_file($file)) {
+                global $_MODULE;
+                $saved = isset($_MODULE) ? $_MODULE : null;
+                $_MODULE = [];
+                include $file;
+                self::$files[$iso] = is_array($_MODULE) ? $_MODULE : [];
+                $_MODULE = $saved;
+            }
+        }
+        $key = '<{sudemi}prestashop>sudemi_' . md5(preg_replace("/\\\\*'/", "\\'", $english));
+
+        return isset(self::$files[$iso][$key]) && trim(self::$files[$iso][$key]) !== ''
+            ? html_entity_decode((string) self::$files[$iso][$key], ENT_QUOTES, 'UTF-8') : $english;
+    }
+
+    /**
+     * An English text in the shop's default language, for notes written on a PrestaShop order
+     * (written by the heartbeat as well, where there is no employee to ask).
+     */
+    public static function forShop($english)
+    {
+        $iso = class_exists('Language') && class_exists('Configuration')
+            ? (string) Language::getIsoById((int) Configuration::get('PS_LANG_DEFAULT')) : 'en';
+
+        return self::translate($english, $iso);
     }
 
     /** One text by key, in the employee's language. */

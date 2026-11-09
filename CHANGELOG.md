@@ -33,8 +33,20 @@ sudemi, and the PrestaShop order follows sudemi's answer.
   sending the change back. An order accepted on sudemi that has no PrestaShop order is booked. A
   daily check of the orders since yesterday catches anything the feed missed.
 - **Send tracking to sudemi** from PrestaShop's own order page, so a tracking number typed after
-  the order was marked shipped here still reaches the buyer (while sudemi has the order as paid).
-  The sudemi block on the order page also shows the order's state on sudemi.
+  the order was marked shipped here still reaches the buyer: while sudemi has the order as paid it
+  is reported shipped with the tracking, while sudemi has it as shipped the tracking is corrected
+  (`POST /orders/{id}/tracking`, core 2026-11-09). The sudemi block on the order page also shows the
+  order's state on sudemi.
+- **Tracking added or changed after shipping goes to sudemi by itself.** When the shipping number of
+  an order already reported shipped is added or changed (the order page's shipping form, or anything
+  else that saves the shipment line), the module sends it to sudemi, which e-mails the buyer the new
+  number. A number that came from sudemi, or that sudemi already has, is not sent; nothing is sent
+  for an order delivered, cancelled or refunded on sudemi. A send that does not get through is
+  retried on the next heartbeats like a shipped report.
+- **Change tracking** on the sudemi order page of a shipped order (when sudemi allows it).
+- **The cancel note says who cancelled.** An order cancelled on sudemi gets a note naming the
+  buyer, the shop or sudemi (`cancelled_by`, core 2026-11-09), instead of always the buyer; an
+  older core gets a neutral note. Notes are written in the shop's language.
 - Module changes made by the module itself (a state that came from sudemi) are never reported back
   to sudemi by the status hook.
 - All new texts in the 12 languages of the module.
