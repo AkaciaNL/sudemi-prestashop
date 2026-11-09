@@ -859,6 +859,10 @@ class SudemiOrders
         $order->conversion_rate = Validate::isLoadedObject($currency) && (float) $currency->conversion_rate > 0
             ? (float) $currency->conversion_rate : 1.0;
         $order->valid = 0;
+        // The shop's rounding, as PrestaShop's own checkout records it on the order: left at 0
+        // the invoice reads it as "round up" and its VAT rows no longer match the order lines.
+        $order->round_mode = (int) Configuration::get('PS_PRICE_ROUND_MODE');
+        $order->round_type = (int) Configuration::get('PS_ROUND_TYPE');
         if (!$order->add()) {
             $cart->delete();
             return null;
