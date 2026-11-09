@@ -17,8 +17,8 @@
   the column); older orders are refunded in their order currency as before.
 - **The module page shows the shop currency sudemi has**, with what it means for buyers and
   payouts (payouts are in euros; for another currency the card company takes about 2 percent), a
-  warning when sudemi does not take payments in the shop's currency (EUR, PLN, CZK, HUF, RON,
-  SEK, DKK, CHF, GBP, NOK, TRY), and a warning when sudemi still has another currency than the
+  warning when sudemi does not take payments in the shop's currency (EUR and every
+  ECB currency except ISK), and a warning when sudemi still has another currency than the
   shop now sells in.
 - The order history on the module page shows what the buyer paid, with its currency, next to what
   the shop receives.

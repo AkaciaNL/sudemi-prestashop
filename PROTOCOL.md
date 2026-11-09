@@ -396,8 +396,8 @@ On the heartbeat, because that is the only channel to a plugin (§3a). The respo
 `external_id` is the shop's own product id, so the plugin can look the item up in its own
 catalogue without storing a mapping. At most 25 ride on one beat; the rest arrive on the next.
 
-`currency_code` is the shop's currency on sudemi (supported: EUR, PLN, CZK, HUF, RON, SEK, DKK,
-CHF, GBP, NOK, TRY); amounts are in that currency's own ISO 4217 minor units, never a fixed x100.
+`currency_code` is the shop's currency on sudemi (supported: EUR and
+every ECB currency except ISK); amounts are in that currency's own ISO 4217 minor units, never a fixed x100.
 Book the local order in that currency; decline an order whose `currency_code` is not the shop's
 currency or not enabled in the shop, rather than booking it in another one.
 

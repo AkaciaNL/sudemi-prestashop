@@ -52,10 +52,10 @@ check( 'format 1500 JPY', '1500 JPY' === SudemiCurrency::format( 1500, 'JPY' ) )
 check( 'format 1234 KWD', '1.234 KWD' === SudemiCurrency::format( 1234, 'KWD' ) );
 
 // Supported shop currencies (protocol 4c).
-foreach ( array( 'EUR', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK', 'CHF', 'GBP', 'NOK', 'TRY' ) as $c ) {
+foreach ( array( 'EUR', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK', 'CHF', 'GBP', 'NOK', 'TRY', 'USD', 'JPY', 'BRL', 'ZAR' ) as $c ) {
 	check( "$c is a sudemi shop currency", SudemiCurrency::isSupported( $c ) );
 }
-foreach ( array( 'USD', 'JPY', 'ISK', '', 'EURO' ) as $c ) {
+foreach ( array( 'ISK', 'XAU', '', 'EURO' ) as $c ) {
 	check( "'$c' is not a sudemi shop currency", ! SudemiCurrency::isSupported( $c ) );
 }
 
@@ -88,8 +88,8 @@ SudemiCurrency::rememberShopAnswer( array( 'status' => 200, 'body' => array( 'st
 check( 'POST /shop echo is kept', 'CZK' === SudemiCurrency::seenBySudemi( 'PLN' ) );
 SudemiCurrency::rememberShopAnswer( null, 'PLN' );
 check( 'unreachable keeps the last echo', 'CZK' === SudemiCurrency::seenBySudemi( 'PLN' ) );
-SudemiCurrency::rememberShopAnswer( array( 'status' => 400, 'body' => array( 'error' => 'rejected' ) ), 'USD' );
-check( 'a refusal forgets the echo and is logged', 'USD' === SudemiCurrency::seenBySudemi( 'USD' ) && 1 === count( SudemiLogger::$lines ) );
+SudemiCurrency::rememberShopAnswer( array( 'status' => 400, 'body' => array( 'error' => 'rejected' ) ), 'ISK' );
+check( 'a refusal forgets the echo and is logged', 'ISK' === SudemiCurrency::seenBySudemi( 'ISK' ) && 1 === count( SudemiLogger::$lines ) );
 
 // The new back-office strings in every language the module ships.
 $strings = array(

@@ -17,8 +17,8 @@ class SudemiCurrency
     /** The currency sudemi answered on POST /shop (its echo of what this shop declared). */
     const CONF_SHOP_CURRENCY = 'SUDEMI_SHOP_CURRENCY';
 
-    /** Shop currencies sudemi takes payments in (protocol 4c). Others are refused on POST /shop. */
-    const SUPPORTED = ['EUR', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK', 'CHF', 'GBP', 'NOK', 'TRY'];
+    /** Shop currencies sudemi takes: EUR and every ECB currency except ISK (owner 2026-11-09, protocol 4c). */
+    const SUPPORTED = ['EUR', 'AUD', 'BRL', 'CAD', 'CHF', 'CNY', 'CZK', 'DKK', 'GBP', 'HKD', 'HUF', 'IDR', 'ILS', 'INR', 'JPY', 'KRW', 'MXN', 'MYR', 'NOK', 'NZD', 'PHP', 'PLN', 'RON', 'SEK', 'SGD', 'THB', 'TRY', 'USD', 'ZAR'];
 
     /** ISO 4217 currencies with no minor unit. */
     const ZERO_DECIMALS = ['BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
