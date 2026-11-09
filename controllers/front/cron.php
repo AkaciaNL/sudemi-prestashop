@@ -44,6 +44,10 @@ class SudemiCronModuleFrontController extends ModuleFrontController
         ignore_user_abort(true);
         @set_time_limit(0);
 
+        // A pairing the shop owner confirmed on sudemi is collected here, so the shop connects
+        // without anyone pressing "Check again". Once collected, the beat below already runs.
+        SudemiPairing::pollInBackground();
+
         $answered = SudemiHeartbeat::run();
         // The full sync the beat (or a carrier change, or the module page) asked for, or the
         // rest of one that back-office page loads started.

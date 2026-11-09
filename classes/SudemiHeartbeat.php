@@ -266,8 +266,17 @@ class SudemiHeartbeat
         Configuration::deleteByName(self::CONF_STATUS);
         Configuration::deleteByName(self::CONF_INTERVAL);
         Configuration::deleteByName(self::CONF_CHANGES);
-        Configuration::deleteByName(self::CONF_CRON_TOKEN);
         SudemiRequests::forget();
+    }
+
+    /**
+     * Drops the cron secret. Only on uninstall: a disconnect keeps it, so the crontab line the
+     * shop owner set up keeps working when the shop is connected again (it is only a trigger
+     * secret, and a cron run on a disconnected shop does nothing).
+     */
+    public static function forgetCronToken()
+    {
+        Configuration::deleteByName(self::CONF_CRON_TOKEN);
     }
 
     /**

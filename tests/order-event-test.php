@@ -33,7 +33,7 @@ check( 'a custom state flagged shipped reports shipped', 'shipped' === Sudemi::o
 check( 'Processing in progress (delivery slip, not shipped) reports nothing', null === Sudemi::orderEvent( 3, false, 5 ) );
 check( 'Payment accepted reports nothing', null === Sudemi::orderEvent( 2, false, 5 ) );
 check( 'no Delivered state configured: never delivered', 'shipped' === Sudemi::orderEvent( 0, true, 0 ) );
-check( 'the module version is 1.2.10', '1.2.10' === SUDEMI_VERSION );
+check( 'the module version is 1.2.11', '1.2.11' === SUDEMI_VERSION );
 
 echo $failures ? "\n$failures check(s) failed\n" : "\nall checks passed\n";
 exit( $failures ? 1 : 0 );

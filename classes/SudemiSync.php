@@ -17,6 +17,19 @@ if (!defined('_PS_VERSION_')) {
 
 class SudemiSync
 {
+    /**
+     * A description (HTML from the rich-text editor) as plain text: the tags go, and the entities
+     * the HTML held ("&amp;", "&nbsp;", "&eacute;") are decoded, so sudemi gets "Salt & Pepper"
+     * and not "Salt &amp; Pepper". A no-break space becomes a plain space. Names need nothing:
+     * PrestaShop stores them as typed.
+     */
+    public static function plain($html)
+    {
+        $text = html_entity_decode(strip_tags((string) $html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        return trim(str_replace("\u{00A0}", ' ', $text));
+    }
+
     const BATCH_SIZE = 100;
 
     /** Set when a full sync should run (sudemi asked, carriers or delivery times changed). */
@@ -721,7 +734,7 @@ class SudemiSync
                 'externalId' => (string) $category['id_category'],
                 'parentExternalId' => !empty($category['id_parent']) ? (string) $category['id_parent'] : null,
                 'name' => $category['name'],
-                'description' => isset($category['description']) ? strip_tags((string) $category['description']) : '',
+                'description' => isset($category['description']) ? self::plain($category['description']) : '',
             ];
         }
         return $payload;
@@ -766,7 +779,7 @@ class SudemiSync
             'gtin' => ((string) $product->ean13) !== '' ? (string) $product->ean13 : (((string) $product->upc) !== '' ? (string) $product->upc : null),
             'mpn' => (string) $product->mpn,
             'title' => (string) $product->name,
-            'description' => strip_tags((string) $product->description_short),
+            'description' => self::plain($product->description_short),
             'url' => $link->getProductLink($product),
             'priceMinor' => self::minor(Product::getPriceStatic($productId, true)),
             'currency' => self::currency(),

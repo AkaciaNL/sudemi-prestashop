@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.11
+
+- **A confirmed connection is collected by cron.** While a connection is started and not yet
+  collected, every run of the module's cron URL (and, for shops without cron, a back-office page
+  load, after the page was sent) asks sudemi once whether the shop owner has confirmed it: at most
+  once a minute for the first half hour, then every twenty minutes (within the 100 polls a pairing
+  allows), and never sooner than a 429 Retry-After says. When it has, the module stores the
+  connection exactly as the "Check again" button does, and the same cron run sends the first
+  heartbeat and the catalogue. Before, the shop only connected when someone pressed "Check again".
+- A connection attempt older than 24 hours (the pairing lifetime) is given up, with one line in
+  the module log; start it again.
+- The cron URL works right after "Connect" (the token is made then, not only when the module page
+  is shown), and it stays the same after Disconnect and a new Connect, so the crontab line keeps
+  working. Only uninstalling the module removes it.
+- **Descriptions are sent as plain text.** Product and category descriptions lost their tags
+  before, but kept the editor's entities, so buyers could read "Salt &amp;amp; Pepper" or
+  "&amp;nbsp;". The entities are now decoded too. Names were already sent as typed. What is already
+  on sudemi is corrected by the next full sync.
+
 ## 1.2.10
 
 - **A sudemi order is booked at what the buyer paid.** Each order line gets the price the buyer

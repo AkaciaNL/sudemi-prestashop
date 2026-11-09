@@ -20,6 +20,22 @@ class SudemiPairing
     const CONF_CODE = 'SUDEMI_PAIRING_CODE';
     const CONF_POLL = 'SUDEMI_PAIRING_POLL';
     const CONF_CLAIM_URL = 'SUDEMI_CLAIM_URL';
+    /** When this pairing was started (unix time), so the background poll knows its lifetime. */
+    const CONF_STARTED = 'SUDEMI_PAIRING_STARTED';
+    /** Not before this time (unix) does the background poll ask again. */
+    const CONF_NEXT_POLL = 'SUDEMI_PAIRING_NEXT_POLL';
+
+    /** sudemi keeps a pairing open for 24 hours; after that there is nothing left to collect. */
+    const LIFETIME = 86400;
+
+    /**
+     * The background poll asks at most once a minute for the first half hour (the shop owner is
+     * usually confirming right now, in another tab), then every twenty minutes. That keeps a
+     * whole 24-hour pairing within the 100 polls sudemi allows per pairing (PROTOCOL.md).
+     */
+    const POLL_EVERY = 60;
+    const POLL_FAST_FOR = 1800;
+    const POLL_SLOW_EVERY = 1200;
 
     /** @return array{ok:bool,message:string} */
     public static function start()
@@ -53,11 +69,16 @@ class SudemiPairing
         Configuration::updateValue(self::CONF_CODE, isset($body['public_code']) ? $body['public_code'] : '');
         Configuration::updateValue(self::CONF_POLL, isset($body['poll_token']) ? $body['poll_token'] : '');
         Configuration::updateValue(self::CONF_CLAIM_URL, isset($body['claim_url']) ? $body['claim_url'] : '');
+        Configuration::updateValue(self::CONF_STARTED, time());
+        Configuration::deleteByName(self::CONF_NEXT_POLL);
+        // The cron URL has to work before the module page is opened again: the next cron run is
+        // what collects this pairing once the shop owner has confirmed it on sudemi.
+        SudemiHeartbeat::cronToken();
 
         return ['ok' => true, 'message' => 'Open the link and confirm the shop on sudemi.'];
     }
 
-    /** Asks whether the shop has been claimed yet. Called from the configuration screen and from cron. */
+    /** Asks whether the shop has been claimed yet. Called by "Check again" and by pollInBackground(). */
     public static function poll()
     {
         $code = Configuration::get(self::CONF_CODE);
@@ -66,11 +87,21 @@ class SudemiPairing
             return false;
         }
 
+        // Whoever asked (the button or the background), the background poll waits a while.
+        Configuration::updateValue(self::CONF_NEXT_POLL, time() + self::pollGap());
         $result = SudemiClient::postUnsigned('/integration/v1/pair/poll', [
             'publicCode' => $code,
             'pollToken' => $token,
         ]);
         if ($result === null) {
+            return false;
+        }
+
+        // 429: sudemi asks for a pause. The background poll waits as long as it was told.
+        if ($result['status'] === 429) {
+            $wait = !empty($result['retry_after']) ? (int) $result['retry_after'] : 300;
+            Configuration::updateValue(self::CONF_NEXT_POLL, time() + max(self::pollGap(), min(3600, $wait)));
+
             return false;
         }
 
@@ -94,6 +125,83 @@ class SudemiPairing
         }
 
         return false;
+    }
+
+    /** True while a pairing was started here and has not been collected or given up yet. */
+    public static function pending()
+    {
+        $code = Configuration::get(self::CONF_CODE);
+        $token = Configuration::get(self::CONF_POLL);
+
+        return is_string($code) && $code !== '' && is_string($token) && $token !== '';
+    }
+
+    /**
+     * Collects a claimed pairing without anyone pressing "Check again".
+     *
+     * Called by every cron run and every fallback beat (back-office page loads). While a pairing
+     * is open it asks sudemi once (at most once a minute, later every twenty minutes, and never
+     * sooner than a 429 said), and on success stores the install exactly as the button does, so
+     * the same run's heartbeat already goes out signed and sudemi asks for the first full sync.
+     * A pairing older than its 24-hour lifetime is given up with one line in the log.
+     *
+     * @return bool whether this call connected the shop
+     */
+    public static function pollInBackground()
+    {
+        if (!self::pending()) {
+            return false;
+        }
+        $now = time();
+        $started = (int) Configuration::get(self::CONF_STARTED);
+        if ($started <= 0) {
+            // Started by a version that did not record it: count the lifetime from now. sudemi
+            // still answers 410 when it really expired, which ends the polling sooner.
+            Configuration::updateValue(self::CONF_STARTED, $now);
+            $started = $now;
+        }
+        if ($now - $started >= self::LIFETIME) {
+            self::forget();
+            SudemiLogger::warn('The connection attempt expired after 24 hours without being confirmed on sudemi. Start it again.');
+
+            return false;
+        }
+        if ((int) Configuration::get(self::CONF_NEXT_POLL) > $now) {
+            return false;
+        }
+
+        return self::poll();
+    }
+
+    /** Seconds until the background poll may ask again, by how long this pairing has been open. */
+    private static function pollGap()
+    {
+        $started = (int) Configuration::get(self::CONF_STARTED);
+
+        return ($started > 0 && time() - $started >= self::POLL_FAST_FOR) ? self::POLL_SLOW_EVERY : self::POLL_EVERY;
+    }
+
+    /**
+     * The fallback for shops with no cron entry: after a back-office page was sent (where
+     * PHP-FPM allows it), so the employee never waits on sudemi for it.
+     */
+    public static function afterResponse()
+    {
+        if (function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')) {
+            while (ob_get_level() > 0 && @ob_end_flush()) {
+            }
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            } else {
+                litespeed_finish_request();
+            }
+        }
+        ignore_user_abort(true);
+        try {
+            self::pollInBackground();
+        } catch (\Throwable $e) {
+            SudemiLogger::warn('Background step failed: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -128,6 +236,8 @@ class SudemiPairing
         Configuration::deleteByName(self::CONF_CODE);
         Configuration::deleteByName(self::CONF_POLL);
         Configuration::deleteByName(self::CONF_CLAIM_URL);
+        Configuration::deleteByName(self::CONF_STARTED);
+        Configuration::deleteByName(self::CONF_NEXT_POLL);
     }
 
     public static function shopUrl()

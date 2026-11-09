@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.2.10');
+define('SUDEMI_VERSION', '1.2.11');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -151,6 +151,7 @@ class Sudemi extends Module
         SudemiWithdrawal::uninstallTable();
         SudemiLogger::clear();
         SudemiHeartbeat::forget();
+        SudemiHeartbeat::forgetCronToken();
         // Price changes that never got through go with the credential that would have signed
         // them: leaving them would mean a reinstall pushing stale prices.
         SudemiQueue::forget();
@@ -392,7 +393,16 @@ class Sudemi extends Module
      */
     public function hookActionAdminControllerSetMedia()
     {
-        if (!SudemiClient::isConnected() || (!SudemiHeartbeat::isDue() && !SudemiSync::pending())) {
+        if (!SudemiClient::isConnected()) {
+            // A pairing waiting to be collected: asked after the page was produced, at most once
+            // a minute (see SudemiPairing::pollInBackground), for shops with no cron entry.
+            if (SudemiPairing::pending()) {
+                register_shutdown_function(['SudemiPairing', 'afterResponse']);
+            }
+
+            return;
+        }
+        if (!SudemiHeartbeat::isDue() && !SudemiSync::pending()) {
             return;
         }
         register_shutdown_function(['SudemiSync', 'afterResponse']);
@@ -422,7 +432,8 @@ class Sudemi extends Module
         if (Tools::isSubmit('sudemi_check')) {
             $output .= $this->guard('sudemi_check');
             if ($output === '') {
-                $output .= SudemiPairing::poll()
+                // Also true when cron (or the background poll) collected it a moment earlier.
+                $output .= (SudemiPairing::poll() || SudemiClient::isConnected())
                     ? $this->displayConfirmation($this->l('Connected to sudemi.'))
                     : $this->displayWarning($this->l('Not confirmed yet. Open the link, confirm the shop on sudemi, then check again.'));
             }
