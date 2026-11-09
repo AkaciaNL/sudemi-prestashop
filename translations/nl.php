@@ -335,3 +335,7 @@ $_MODULE['<{sudemi}prestashop>sudemi_991661770a95ee340040bda8222ed45c'] = 'Geann
 $_MODULE['<{sudemi}prestashop>sudemi_21edf427d213357df10dfc4a026fb3da'] = 'Geannuleerd door sudemi, voor verzending; de koper heeft alles terugbetaald gekregen.';
 $_MODULE['<{sudemi}prestashop>sudemi_43b49c2633523bbc6054e8672df5dc83'] = 'Geannuleerd bij sudemi, voor verzending; de koper heeft alles terugbetaald gekregen.';
 $_MODULE['<{sudemi}prestashop>sudemi_557887c3dae594fd42a350824a56a27f'] = 'Verstuur deze bestelling niet.';
+$_MODULE['<{sudemi}prestashop>sudemi_1a9d7a7ca7274c589013b7defc480fe1'] = 'Geannuleerd door de koper bij sudemi voordat de bestelling was bevestigd; er is niets afgeschreven bij de koper.';
+$_MODULE['<{sudemi}prestashop>sudemi_ffa5603f2cade9b7dba8e3e0aa6302c9'] = 'Geweigerd door de winkel bij sudemi; er is niets afgeschreven bij de koper.';
+$_MODULE['<{sudemi}prestashop>sudemi_620d54fd2ce273e46495e5447cb71c27'] = 'Automatisch geweigerd door sudemi (bijvoorbeeld omdat de bestelling niet op tijd werd beantwoord); er is niets afgeschreven bij de koper.';
+$_MODULE['<{sudemi}prestashop>sudemi_47112cbb237ef3c65c07c24827ccedfe'] = 'Geweigerd bij sudemi; er is niets afgeschreven bij de koper.';

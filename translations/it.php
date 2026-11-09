@@ -335,3 +335,7 @@ $_MODULE['<{sudemi}prestashop>sudemi_991661770a95ee340040bda8222ed45c'] = 'Annul
 $_MODULE['<{sudemi}prestashop>sudemi_21edf427d213357df10dfc4a026fb3da'] = 'Annullato da sudemi prima della spedizione; l\'acquirente è stato rimborsato per intero.';
 $_MODULE['<{sudemi}prestashop>sudemi_43b49c2633523bbc6054e8672df5dc83'] = 'Annullato su sudemi prima della spedizione; l\'acquirente è stato rimborsato per intero.';
 $_MODULE['<{sudemi}prestashop>sudemi_557887c3dae594fd42a350824a56a27f'] = 'Non spedire questo ordine.';
+$_MODULE['<{sudemi}prestashop>sudemi_1a9d7a7ca7274c589013b7defc480fe1'] = 'Annullato dall\'acquirente su sudemi prima che l\'ordine fosse confermato; all\'acquirente non è stato addebitato nulla.';
+$_MODULE['<{sudemi}prestashop>sudemi_ffa5603f2cade9b7dba8e3e0aa6302c9'] = 'Rifiutato dal negozio su sudemi; all\'acquirente non è stato addebitato nulla.';
+$_MODULE['<{sudemi}prestashop>sudemi_620d54fd2ce273e46495e5447cb71c27'] = 'Rifiutato automaticamente da sudemi (ad esempio perché l\'ordine non ha ricevuto risposta in tempo); all\'acquirente non è stato addebitato nulla.';
+$_MODULE['<{sudemi}prestashop>sudemi_47112cbb237ef3c65c07c24827ccedfe'] = 'Rifiutato su sudemi; all\'acquirente non è stato addebitato nulla.';

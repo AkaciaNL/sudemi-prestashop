@@ -335,3 +335,7 @@ $_MODULE['<{sudemi}prestashop>sudemi_991661770a95ee340040bda8222ed45c'] = 'Anulo
 $_MODULE['<{sudemi}prestashop>sudemi_21edf427d213357df10dfc4a026fb3da'] = 'Anulowane przez sudemi przed wysyłką; kupujący otrzymał pełny zwrot.';
 $_MODULE['<{sudemi}prestashop>sudemi_43b49c2633523bbc6054e8672df5dc83'] = 'Anulowane w sudemi przed wysyłką; kupujący otrzymał pełny zwrot.';
 $_MODULE['<{sudemi}prestashop>sudemi_557887c3dae594fd42a350824a56a27f'] = 'Nie wysyłaj tego zamówienia.';
+$_MODULE['<{sudemi}prestashop>sudemi_1a9d7a7ca7274c589013b7defc480fe1'] = 'Anulowane przez kupującego w sudemi przed potwierdzeniem zamówienia; kupujący nie został obciążony.';
+$_MODULE['<{sudemi}prestashop>sudemi_ffa5603f2cade9b7dba8e3e0aa6302c9'] = 'Odrzucone przez sklep w sudemi; kupujący nie został obciążony.';
+$_MODULE['<{sudemi}prestashop>sudemi_620d54fd2ce273e46495e5447cb71c27'] = 'Odrzucone automatycznie przez sudemi (na przykład dlatego, że nie odpowiedziano na zamówienie na czas); kupujący nie został obciążony.';
+$_MODULE['<{sudemi}prestashop>sudemi_47112cbb237ef3c65c07c24827ccedfe'] = 'Odrzucone w sudemi; kupujący nie został obciążony.';

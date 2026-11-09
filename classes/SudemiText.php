@@ -234,6 +234,10 @@ class SudemiText
         'note_cancel_sudemi' => 'Cancelled by sudemi before shipping; the buyer has been refunded in full.',
         'note_cancel' => 'Cancelled on sudemi before shipping; the buyer has been refunded in full.',
         'note_do_not_ship' => 'Do not ship this order.',
+        'note_decline_buyer' => 'Cancelled by the buyer on sudemi before the order was confirmed; the buyer was not charged.',
+        'note_decline_shop' => 'Declined by the shop on sudemi; the buyer was not charged.',
+        'note_decline_sudemi' => 'Declined automatically by sudemi (for example because the order was not answered in time); the buyer was not charged.',
+        'note_decline' => 'Declined on sudemi; the buyer was not charged.',
     ];
 
     /**

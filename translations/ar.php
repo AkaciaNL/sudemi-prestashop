@@ -335,3 +335,7 @@ $_MODULE['<{sudemi}prestashop>sudemi_991661770a95ee340040bda8222ed45c'] = 'أل�
 $_MODULE['<{sudemi}prestashop>sudemi_21edf427d213357df10dfc4a026fb3da'] = 'ألغاه sudemi قبل الشحن؛ أُعيد إلى المشتري المبلغ كاملًا.';
 $_MODULE['<{sudemi}prestashop>sudemi_43b49c2633523bbc6054e8672df5dc83'] = 'أُلغي في sudemi قبل الشحن؛ أُعيد إلى المشتري المبلغ كاملًا.';
 $_MODULE['<{sudemi}prestashop>sudemi_557887c3dae594fd42a350824a56a27f'] = 'لا تشحن هذا الطلب.';
+$_MODULE['<{sudemi}prestashop>sudemi_1a9d7a7ca7274c589013b7defc480fe1'] = 'ألغاه المشتري في sudemi قبل تأكيد الطلب؛ لم يُخصم أي مبلغ من المشتري.';
+$_MODULE['<{sudemi}prestashop>sudemi_ffa5603f2cade9b7dba8e3e0aa6302c9'] = 'رفضه المتجر في sudemi؛ لم يُخصم أي مبلغ من المشتري.';
+$_MODULE['<{sudemi}prestashop>sudemi_620d54fd2ce273e46495e5447cb71c27'] = 'رفضه sudemi تلقائيًا (مثلًا لأنه لم يتم الرد على الطلب في الوقت المحدد)؛ لم يُخصم أي مبلغ من المشتري.';
+$_MODULE['<{sudemi}prestashop>sudemi_47112cbb237ef3c65c07c24827ccedfe'] = 'رُفض في sudemi؛ لم يُخصم أي مبلغ من المشتري.';

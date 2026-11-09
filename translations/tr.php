@@ -335,3 +335,7 @@ $_MODULE['<{sudemi}prestashop>sudemi_991661770a95ee340040bda8222ed45c'] = 'Mağa
 $_MODULE['<{sudemi}prestashop>sudemi_21edf427d213357df10dfc4a026fb3da'] = 'sudemi tarafından kargodan önce iptal edildi; alıcıya tutarın tamamı iade edildi.';
 $_MODULE['<{sudemi}prestashop>sudemi_43b49c2633523bbc6054e8672df5dc83'] = 'sudemi\'de kargodan önce iptal edildi; alıcıya tutarın tamamı iade edildi.';
 $_MODULE['<{sudemi}prestashop>sudemi_557887c3dae594fd42a350824a56a27f'] = 'Bu siparişi göndermeyin.';
+$_MODULE['<{sudemi}prestashop>sudemi_1a9d7a7ca7274c589013b7defc480fe1'] = 'Alıcı tarafından sipariş onaylanmadan önce sudemi\'de iptal edildi; alıcıdan ücret alınmadı.';
+$_MODULE['<{sudemi}prestashop>sudemi_ffa5603f2cade9b7dba8e3e0aa6302c9'] = 'Mağaza tarafından sudemi\'de reddedildi; alıcıdan ücret alınmadı.';
+$_MODULE['<{sudemi}prestashop>sudemi_620d54fd2ce273e46495e5447cb71c27'] = 'sudemi tarafından otomatik olarak reddedildi (örneğin sipariş zamanında yanıtlanmadığı için); alıcıdan ücret alınmadı.';
+$_MODULE['<{sudemi}prestashop>sudemi_47112cbb237ef3c65c07c24827ccedfe'] = 'sudemi\'de reddedildi; alıcıdan ücret alınmadı.';

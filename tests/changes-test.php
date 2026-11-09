@@ -192,6 +192,25 @@ check( 'translate: a text with an apostrophe is found (PrestaShop\'s key escapes
 $e = SudemiChanges::entryOf( array( 'order_id' => $id, 'status' => 'CANCELLED', 'revision' => 5, 'cancelled_by' => 'shop' ) );
 check( 'a change entry keeps cancelled_by', 'shop' === $e['cancelled_by'] );
 
+// ---- who declined (cancelled_by on a DECLINED order) ----
+check( 'declined by the shop: the note says the shop', 'Declined by the shop on sudemi; the buyer was not charged. Do not ship this order.' === SudemiOrders::declineNote( 'shop' ) );
+check( 'declined by sudemi: the note says it was automatic (not answered in time)',
+	'Declined automatically by sudemi (for example because the order was not answered in time); the buyer was not charged. Do not ship this order.' === SudemiOrders::declineNote( 'sudemi' ) );
+check( 'declined as cancelled by the buyer before the shop confirmed', 'Cancelled by the buyer on sudemi before the order was confirmed; the buyer was not charged. Do not ship this order.' === SudemiOrders::declineNote( 'BUYER' ) );
+check( 'an older core (no cancelled_by) or an unknown value: neutral, nobody blamed',
+	'note_decline' === SudemiOrders::declineNoteKey( null ) && 'note_decline' === SudemiOrders::declineNoteKey( 'martian' ) && 'note_decline' === SudemiOrders::declineNoteKey( 42 )
+	&& 'Declined on sudemi; the buyer was not charged. Do not ship this order.' === SudemiOrders::declineNote( null ) );
+check( 'the decline note in the shop\'s language (Polish shop: odrzucone przez sklep)', 'Odrzucone przez sklep w sudemi; kupujący nie został obciążony.'
+	=== SudemiText::translate( SudemiText::EN['note_decline_shop'], 'pl' ) );
+check( 'the decline note in French (refusée automatiquement par sudemi)', 0 === strpos( SudemiText::translate( SudemiText::EN['note_decline_sudemi'], 'fr' ), 'Refusée automatiquement par sudemi' ) );
+check( 'DECLINED, still unpaid here: release (the note comes from it)', array( 'release', 'remember' ) === SudemiChanges::plan( $entry( 'DECLINED', 4, array( 'cancelled_by' => 'shop' ) ), local( 'prep' ) ) );
+check( 'DECLINED, cancelled here already (the beat\'s re-check was first): only the note',
+	array( 'declined_note', 'remember' ) === SudemiChanges::plan( $entry( 'DECLINED', 4, array( 'cancelled_by' => 'sudemi' ) ), local( 'cancelled' ) ) );
+check( 'DECLINED, a repeat (revision already applied): nothing, so no second note', array() === SudemiChanges::plan( $entry( 'DECLINED', 3 ), local( 'cancelled' ) ) );
+check( 'DECLINED never booked here (decided by hand): nothing', array() === SudemiChanges::plan( $entry( 'DECLINED', 4 ), null ) );
+$e = SudemiChanges::entryOf( array( 'order_id' => $id, 'status' => 'DECLINED', 'revision' => 2, 'cancelled_by' => 'sudemi' ) );
+check( 'a DECLINED change entry keeps cancelled_by', 'sudemi' === $e['cancelled_by'] );
+
 // ---- every text in all twelve languages (English is the source) ----
 check( 'the texts include the order page block and the shipping page', isset( SudemiText::EN['do_tracking'], SudemiText::EN['ship_prefill'], SudemiText::EN['payouts_delay'] ) );
 foreach ( array( 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he' ) as $lang ) {

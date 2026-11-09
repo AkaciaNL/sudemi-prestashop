@@ -150,6 +150,11 @@ class SudemiChanges
         if ($state === 'prep' && $status === 'DECLINED') {
             $steps[] = 'release';
         }
+        if ($state === 'cancelled' && $status === 'DECLINED') {
+            // Cancelled here already (the beat's re-check heard "declined" first, or the merchant
+            // cancelled it): the note still says who declined.
+            $steps[] = 'declined_note';
+        }
         if ($status === 'CANCELLED' && !$closed && !in_array($state, ['shipped', 'delivered'], true)) {
             $steps[] = 'cancel';
         }
@@ -226,7 +231,11 @@ class SudemiChanges
                     break;
                 case 'release':
                     SudemiOrders::handleSettled([['order_id' => $sudemiId, 'status' => 'DECLINED',
-                        'declined_reason' => 'released on sudemi']]);
+                        'declined_reason' => 'released on sudemi',
+                        'cancelled_by' => isset($entry['cancelled_by']) ? $entry['cancelled_by'] : null]]);
+                    break;
+                case 'declined_note':
+                    SudemiOrders::declineMessage($order, isset($entry['cancelled_by']) ? $entry['cancelled_by'] : null);
                     break;
                 case 'cancel':
                     SudemiOrders::setState($order, (int) Configuration::get('PS_OS_CANCELED'));

@@ -335,3 +335,7 @@ $_MODULE['<{sudemi}prestashop>sudemi_991661770a95ee340040bda8222ed45c'] = 'Cance
 $_MODULE['<{sudemi}prestashop>sudemi_21edf427d213357df10dfc4a026fb3da'] = 'Cancelado por sudemi antes del envío; se ha reembolsado todo al comprador.';
 $_MODULE['<{sudemi}prestashop>sudemi_43b49c2633523bbc6054e8672df5dc83'] = 'Cancelado en sudemi antes del envío; se ha reembolsado todo al comprador.';
 $_MODULE['<{sudemi}prestashop>sudemi_557887c3dae594fd42a350824a56a27f'] = 'No envíes este pedido.';
+$_MODULE['<{sudemi}prestashop>sudemi_1a9d7a7ca7274c589013b7defc480fe1'] = 'Cancelado por el comprador en sudemi antes de que se confirmara el pedido; no se ha cobrado nada al comprador.';
+$_MODULE['<{sudemi}prestashop>sudemi_ffa5603f2cade9b7dba8e3e0aa6302c9'] = 'Rechazado por la tienda en sudemi; no se ha cobrado nada al comprador.';
+$_MODULE['<{sudemi}prestashop>sudemi_620d54fd2ce273e46495e5447cb71c27'] = 'Rechazado automáticamente por sudemi (por ejemplo, porque el pedido no se respondió a tiempo); no se ha cobrado nada al comprador.';
+$_MODULE['<{sudemi}prestashop>sudemi_47112cbb237ef3c65c07c24827ccedfe'] = 'Rechazado en sudemi; no se ha cobrado nada al comprador.';

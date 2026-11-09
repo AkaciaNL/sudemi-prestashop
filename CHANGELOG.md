@@ -47,6 +47,10 @@ sudemi, and the PrestaShop order follows sudemi's answer.
 - **The cancel note says who cancelled.** An order cancelled on sudemi gets a note naming the
   buyer, the shop or sudemi (`cancelled_by`, core 2026-11-09), instead of always the buyer; an
   older core gets a neutral note. Notes are written in the shop's language.
+- **The decline note says who declined.** A waiting order declined on sudemi gets a note naming the
+  shop, sudemi (declined automatically, for example not answered in time) or the buyer (cancelled
+  before the order was confirmed), always with "the buyer was not charged"; also when the
+  heartbeat's re-check cancelled the order before the change feed said who (written once).
 - Module changes made by the module itself (a state that came from sudemi) are never reported back
   to sudemi by the status hook.
 - All new texts in the 12 languages of the module.

@@ -1236,6 +1236,42 @@ class SudemiOrders
     }
 
     /**
+     * The SudemiText key of the note on an order declined on sudemi (never charged), by who ended
+     * it (cancelled_by on a DECLINED order: shop = the shop declined it, sudemi = declined
+     * automatically, buyer = the buyer cancelled before the shop confirmed). Neutral when not
+     * known. Pure.
+     */
+    public static function declineNoteKey($cancelledBy)
+    {
+        $by = is_string($cancelledBy) ? strtolower($cancelledBy) : '';
+
+        return in_array($by, ['buyer', 'shop', 'sudemi'], true) ? 'note_decline_' . $by : 'note_decline';
+    }
+
+    /** The decline note in the shop's language, ending with "Do not ship this order.". */
+    public static function declineNote($cancelledBy)
+    {
+        return SudemiText::forShop(SudemiText::EN[self::declineNoteKey($cancelledBy)]) . ' '
+            . SudemiText::forShop(SudemiText::EN['note_do_not_ship']);
+    }
+
+    /**
+     * Writes the decline note on the order once: the order may have been cancelled here before
+     * (the heartbeat's re-check learns "declined" before the change feed says who declined), and
+     * a repeat of the same news adds nothing.
+     */
+    public static function declineMessage($order, $cancelledBy)
+    {
+        $text = self::declineNote($cancelledBy);
+        $current = property_exists($order, 'note') ? (string) Db::getInstance()->getValue(
+            'SELECT note FROM `' . _DB_PREFIX_ . 'orders` WHERE id_order = ' . (int) $order->id
+        ) : '';
+        if ($current === '' || strpos($current, $text) === false) {
+            self::privateMessage($order, $text);
+        }
+    }
+
+    /**
      * What one settled_orders entry asks of the local order: 'pay', 'release', 'buyer_cancel', or
      * null (nothing to do). Pure, so it can be tested without PrestaShop.
      *
@@ -1325,11 +1361,16 @@ class SudemiOrders
             $reason = !empty($settled['declined_reason']) ? (string) $settled['declined_reason'] : 'reason not given';
             // PrestaShop puts the stock back itself when an order moves to Canceled.
             self::setState($order, (int) Configuration::get('PS_OS_CANCELED'));
+            // The note says who declined: the shop, sudemi (no answer in time, shop removed) or
+            // the buyer (cancelled before the shop confirmed); neutral on an older core.
+            $by = isset($settled['cancelled_by']) ? $settled['cancelled_by'] : null;
+            $key = self::declineNoteKey($by);
             SudemiLogger::warn(sprintf(
                 'sudemi order %s was released after all: %s. The local order was cancelled and stock restored.',
                 $sudemiId,
                 $reason
-            ));
+            ) . ($key !== 'note_decline' ? ' ' . SudemiText::EN[$key] : ''));
+            self::declineMessage($order, $by);
             return;
         }
 
