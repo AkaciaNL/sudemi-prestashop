@@ -916,7 +916,12 @@ class SudemiOrders
             }
             $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
             if ((int) StockAvailable::getQuantityAvailableByProduct($productId, $attributeId ?: null) < $quantity) {
-                return sprintf('"%s" is out of stock', $product->name);
+                // The title sudemi has for the line: the product was loaded without a language,
+                // so its name is one entry per language ("Array" in the reason buyers read).
+                $name = isset($line['title']) && (string) $line['title'] !== '' ? (string) $line['title']
+                    : (is_array($product->name) ? (string) reset($product->name) : (string) $product->name);
+
+                return sprintf('"%s" is out of stock', $name);
             }
         }
         return null;
@@ -1617,6 +1622,53 @@ class SudemiOrders
                 UNIQUE KEY `sudemi_order_id` (`sudemi_order_id`)
             ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4'
         );
+    }
+
+    /**
+     * The module's tables as this version needs them; raised whenever a column is added. Kept
+     * apart from the module version because a shop can run files newer than its last upgrade
+     * step (a same-version package replaced, an upgrade step that stopped halfway): PrestaShop
+     * then runs no upgrade script, and a missing column would break order pages and the feed.
+     */
+    const SCHEMA = 2;
+    const CONF_SCHEMA = 'SUDEMI_SCHEMA';
+    const CONF_SCHEMA_TRIED = 'SUDEMI_SCHEMA_TRIED';
+
+    /**
+     * Brings the tables up to SCHEMA when they are behind: every step is idempotent (CREATE IF
+     * NOT EXISTS, a column added only when missing), so a fresh install, an upgrade from 1.2.x
+     * and a shop whose upgrade step never ran all end the same. Cheap when current (one cached
+     * configuration read); a failure is logged and tried again on the next request.
+     */
+    public static function ensureSchema()
+    {
+        if ((int) Configuration::getGlobalValue(self::CONF_SCHEMA) >= self::SCHEMA) {
+            return true;
+        }
+        // After a failure, not on every request (each try writes the log): every ten minutes.
+        if (time() - (int) Configuration::getGlobalValue(self::CONF_SCHEMA_TRIED) < 600) {
+            return false;
+        }
+        try {
+            $ok = self::installTable() && self::addCurrencyColumn() && self::addChangeColumns()
+                && SudemiWithdrawal::installTable();
+        } catch (\Throwable $e) {
+            $ok = false;
+        }
+        if ($ok) {
+            Configuration::updateGlobalValue(self::CONF_SCHEMA, self::SCHEMA);
+        } else {
+            Configuration::updateGlobalValue(self::CONF_SCHEMA_TRIED, time());
+            SudemiLogger::warn('The sudemi tables could not be brought up to date; tried again in ten minutes.');
+        }
+
+        return $ok;
+    }
+
+    public static function forgetSchema()
+    {
+        Configuration::deleteByName(self::CONF_SCHEMA);
+        Configuration::deleteByName(self::CONF_SCHEMA_TRIED);
     }
 
     /** 1.2.12: the currency sudemi booked each order in, on tables made by an older version. */

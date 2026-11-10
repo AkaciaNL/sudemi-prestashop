@@ -116,6 +116,15 @@ class SudemiSync
             // Read again under the lock, from the database rather than PrestaShop's cache of it:
             // another request may have moved it on or finished it meanwhile.
             $state = self::state(true);
+            if ($state !== null && !self::ownState($state)) {
+                // Started under an earlier connection (the shop was connected again since):
+                // sudemi refuses its id from this one, and continuing it would only abandon it
+                // and leave this run without a sync. Started again under this connection.
+                SudemiLogger::info('A catalogue sync from an earlier connection was replaced by a new one.');
+                self::clearState();
+                self::request();
+                $state = null;
+            }
             if ($state !== null && time() - (int) $state['started'] > self::MAX_SYNC_AGE) {
                 SudemiLogger::warn('An unfinished catalogue sync was too old and is started again.');
                 self::clearState();
@@ -177,6 +186,8 @@ class SudemiSync
         }
         $state = [
             'id' => (string) $started['body']['sync_id'],
+            // The connection the sync belongs to; see ownState().
+            'install' => (string) SudemiClient::installId(),
             // What the catalogue was when this sync started reading it; sent with the commit and
             // in a heartbeat right after it (SudemiHeartbeat::anchor), so sudemi holds the
             // revision this sync describes.
@@ -615,6 +626,26 @@ class SudemiSync
         Configuration::updateValue(self::CONF_CATEGORIES, self::categoriesHash($categories));
 
         return true;
+    }
+
+    /**
+     * Whether a sync in progress was started under the current connection. One saved by an
+     * earlier version carries no connection and counts as foreign: starting it again costs
+     * one full sync, continuing a foreign one costs the run.
+     */
+    private static function ownState(array $state)
+    {
+        return isset($state['install']) && (string) $state['install'] === (string) SudemiClient::installId();
+    }
+
+    /** Called when the shop connects: a sync in progress from an earlier connection is dropped. */
+    public static function abandonForeign()
+    {
+        $state = self::state(true);
+        if ($state !== null && !self::ownState($state)) {
+            self::clearState();
+            self::request();
+        }
     }
 
     public static function forget()

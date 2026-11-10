@@ -14,5 +14,5 @@ function upgrade_module_1_3_0($module)
 {
     SudemiChanges::since();
 
-    return SudemiOrders::addChangeColumns() && $module->installTabs() && $module->registerTrackingHooks();
+    return SudemiOrders::ensureSchema() && $module->installTabs() && $module->registerTrackingHooks();
 }

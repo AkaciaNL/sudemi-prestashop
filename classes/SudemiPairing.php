@@ -119,6 +119,9 @@ class SudemiPairing
             // path for no reason.
             Configuration::deleteByName(self::CONF_CHALLENGE);
             self::forget();
+            // A full sync a previous connection left unfinished belongs to that connection;
+            // sudemi refuses it from this one. The new connection starts its own.
+            SudemiSync::abandonForeign();
             SudemiLogger::info('Connected to sudemi.');
 
             return true;

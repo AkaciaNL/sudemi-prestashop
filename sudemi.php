@@ -53,6 +53,13 @@ class Sudemi extends Module
 
         parent::__construct();
 
+        // Installed (PrestaShop knows its id): the tables are brought up to what this code needs
+        // when they are behind, whatever upgrade steps did or did not run. One cached read when
+        // they are current.
+        if ($this->id) {
+            SudemiOrders::ensureSchema();
+        }
+
         $this->displayName = $this->l('sudemi Connector');
         $this->description = $this->l('List your catalogue on sudemi, so an AI assistant can find your products and send buyers to you.');
         $this->confirmUninstall = $this->l('This removes the signing key and disconnects the shop from sudemi. Continue?');
@@ -80,7 +87,8 @@ class Sudemi extends Module
             && $this->registerOrderPageHooks()
             && $this->registerCombinationHooks()
             && $this->registerTrackingHooks()
-            && $this->installTabs();
+            && $this->installTabs()
+            && SudemiOrders::ensureSchema();
     }
 
     /**
@@ -246,6 +254,7 @@ class Sudemi extends Module
         SudemiPairing::forget();
         SudemiOrders::uninstallTable();
         SudemiWithdrawal::uninstallTable();
+        SudemiOrders::forgetSchema();
         SudemiLogger::clear();
         SudemiHeartbeat::forget();
         SudemiHeartbeat::forgetCronToken();

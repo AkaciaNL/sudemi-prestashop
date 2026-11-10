@@ -60,6 +60,17 @@ sudemi, and the PrestaShop order follows sudemi's answer.
   (`tracking_stop` on the order table). A tracking number longer than PrestaShop's 64 characters
   is compared as PrestaShop holds it, so it is neither written (with a note) on every feed entry
   nor sent back cut short.
+- **The tables bring themselves up to date.** The module checks a schema number when it loads and
+  adds what is missing (idempotent: tables created if absent, columns added only when missing), so
+  a fresh install, an upgrade from 1.2.x and a shop whose upgrade step did not run (a same-version
+  package replaced, an upgrade that stopped halfway) all get every column. A failure is logged and
+  tried again ten minutes later.
+- **Connecting again starts a fresh catalogue sync.** A full sync an earlier connection left
+  unfinished is dropped when the shop connects (and by the sync itself when it finds one), and a
+  new one is asked for. Before, the first cron run after connecting tried to continue the old
+  sync, which sudemi refuses, and sent no catalogue until the run after.
+- **Out-of-stock decline reasons name the product.** The reason sent to sudemi (and read by the
+  buyer) said '"Array" is out of stock'; it now uses the item's title.
 - Module changes made by the module itself (a state that came from sudemi) are never reported back
   to sudemi by the status hook.
 - All new texts in the 12 languages of the module.

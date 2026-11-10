@@ -55,6 +55,15 @@ class SudemiLogger {
 	}
 }
 
+/** Counts the calls that drop a sync an earlier connection left in progress. */
+class SudemiSync {
+	public static $abandoned = 0;
+
+	public static function abandonForeign() {
+		self::$abandoned++;
+	}
+}
+
 class SudemiHeartbeat {
 	public static function cronToken() {
 		return str_repeat( 'a', 32 );
@@ -125,6 +134,7 @@ check( 'claimed: the challenge and the pairing are forgotten',
 	false === Configuration::get( SudemiPairing::CONF_CHALLENGE ) && ! SudemiPairing::pending()
 	&& false === Configuration::get( SudemiPairing::CONF_STARTED ) && false === Configuration::get( SudemiPairing::CONF_NEXT_POLL ) );
 check( 'claimed: logged once', array( 'info Connected to sudemi.' ) === SudemiLogger::$lines );
+check( 'claimed: a sync left by an earlier connection is dropped once', 1 === SudemiSync::$abandoned );
 SudemiClient::$calls = array();
 SudemiPairing::pollInBackground();
 check( 'claimed: the next run asks nothing', array() === SudemiClient::$calls );
