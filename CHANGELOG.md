@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2
+
+- **Translations reviewed.** Every text in the 11 other languages was checked against the English:
+  money words (payout versus the buyer's payment), one form of address per language, plain wording.
+- **The currency note names the right party.** The conversion fee of about 2 percent is taken by the
+  payment provider Stripe, not by a "card company".
+
 ## 1.3.1
 
 - **A sudemi order can no longer become two PrestaShop orders.** Before, two accepts at the same

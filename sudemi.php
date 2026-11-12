@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.3.1');
+define('SUDEMI_VERSION', '1.3.2');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -1156,7 +1156,7 @@ class Sudemi extends Module
         return [
             'label' => $this->l('Shop currency'),
             'code' => $seen,
-            'help' => $this->l('Buyers pay in this currency, and the orders sudemi sends you are in it. Your payout from sudemi is in euros; for any other currency the card company takes a conversion fee of about 2 percent from your payout.'),
+            'help' => $this->l('Buyers pay in this currency, and the orders sudemi sends you are in it. Your payout from sudemi is in euros; for any other currency the payment provider Stripe takes a conversion fee of about 2 percent from your payout.'),
             'warnings' => $warnings,
         ];
     }

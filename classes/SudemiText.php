@@ -157,7 +157,7 @@ class SudemiText
         'payout_expected' => 'Expected',
         'payout_paid' => 'Paid out',
         'payout_due' => 'Due on',
-        'payout_converted' => 'Paid in %s after the card company\'s conversion fee.',
+        'payout_converted' => 'Paid in %s after the conversion fee of the payment provider Stripe.',
         'timeline' => 'History',
         'by_SELLER' => 'by you',
         'by_ADMIN' => 'by sudemi',

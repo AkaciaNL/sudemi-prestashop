@@ -95,7 +95,7 @@ check( 'a refusal forgets the echo and is logged', 'ISK' === SudemiCurrency::see
 $strings = array(
 	'Buyer paid',
 	'Shop currency',
-	'Buyers pay in this currency, and the orders sudemi sends you are in it. Your payout from sudemi is in euros; for any other currency the card company takes a conversion fee of about 2 percent from your payout.',
+	'Buyers pay in this currency, and the orders sudemi sends you are in it. Your payout from sudemi is in euros; for any other currency the payment provider Stripe takes a conversion fee of about 2 percent from your payout.',
 	'sudemi does not take payments in %1$s, so your products are not shown to buyers. sudemi takes these currencies: %2$s. Choose one of them as the default currency of this shop, then send the catalogue again.',
 	'This shop now sells in %1$s, but sudemi still has %2$s. Send the catalogue again so buyers see the right prices.',
 );
