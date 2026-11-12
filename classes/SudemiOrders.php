@@ -109,7 +109,13 @@ class SudemiOrders
             return;
         }
 
-        $order = self::createLocalOrder($pending, $sudemiId);
+        $got = self::obtainLocalOrder($pending, $sudemiId);
+        if ($got['state'] === 'busy') {
+            // Another run (Accept on the Orders page, a bulk accept) is building it right now and
+            // sends the answer itself. Nothing is built twice; the next heartbeat looks again.
+            return;
+        }
+        $order = $got['order'];
         if (!$order) {
             SudemiClient::postSigned(
                 '/integration/v1/orders/' . rawurlencode($sudemiId) . '/reject',
@@ -118,7 +124,57 @@ class SudemiOrders
 
             return;
         }
+        if ($got['state'] === 'existing' && self::isLocallyCancelled($order)) {
+            self::rejectFromShop($order, $sudemiId, 'cancelled in the shop', false);
+
+            return;
+        }
         self::accept($sudemiId, $order, false);
+    }
+
+    /**
+     * The PrestaShop order for a sudemi order: the one already built, or a new one built by exactly
+     * one caller (review 2026-11-12, see SudemiClaims). Every accept goes through here: the
+     * heartbeat's automatic answer, Accept on the Orders page, bulk accept and orders accepted on
+     * sudemi itself.
+     *
+     * @return array{state:string,order:Order|null} state: created, existing, busy (another caller
+     *               is building it right now) or failed (it could not be built)
+     */
+    public static function obtainLocalOrder(array $pending, $sudemiId)
+    {
+        $sudemiId = strtolower((string) $sudemiId);
+        $claim = SudemiClaims::claim($sudemiId);
+        if ($claim === SudemiClaims::BUSY) {
+            return ['state' => 'busy', 'order' => null];
+        }
+        if (is_int($claim)) {
+            return ['state' => 'existing', 'order' => new Order($claim)];
+        }
+        // Won. An order built before claims existed, or by a caller that died after building it,
+        // is linked, not built again.
+        $existing = self::findLocalOrder($sudemiId);
+        if ($existing !== null) {
+            SudemiClaims::link($sudemiId, $existing->id);
+
+            return ['state' => 'existing', 'order' => $existing];
+        }
+        try {
+            $order = self::createLocalOrder($pending, $sudemiId);
+        } catch (\Throwable $e) {
+            // Failed here and now (not a process that died): the claim goes at once, so the next
+            // heartbeat can try again instead of waiting out the stale time.
+            SudemiClaims::release($sudemiId);
+            throw $e;
+        }
+        if (!$order) {
+            SudemiClaims::release($sudemiId);
+
+            return ['state' => 'failed', 'order' => null];
+        }
+        SudemiClaims::link($sudemiId, $order->id);
+
+        return ['state' => 'created', 'order' => $order];
     }
 
     /**
@@ -1630,7 +1686,7 @@ class SudemiOrders
      * step (a same-version package replaced, an upgrade step that stopped halfway): PrestaShop
      * then runs no upgrade script, and a missing column would break order pages and the feed.
      */
-    const SCHEMA = 2;
+    const SCHEMA = 3; // 3: the order claim table (review 2026-11-12)
     const CONF_SCHEMA = 'SUDEMI_SCHEMA';
     const CONF_SCHEMA_TRIED = 'SUDEMI_SCHEMA_TRIED';
 
@@ -1651,7 +1707,7 @@ class SudemiOrders
         }
         try {
             $ok = self::installTable() && self::addCurrencyColumn() && self::addChangeColumns()
-                && SudemiWithdrawal::installTable();
+                && SudemiWithdrawal::installTable() && SudemiClaims::installTable();
         } catch (\Throwable $e) {
             $ok = false;
         }
@@ -1835,9 +1891,13 @@ class SudemiOrders
         if ($problem !== null) {
             return ['problem' => $problem];
         }
-        $order = self::createLocalOrder($pending, strtolower($sudemiId));
+        $got = self::obtainLocalOrder($pending, $sudemiId);
+        if ($got['state'] === 'busy') {
+            // Being accepted right now by another run (a second click, the automatic confirmation).
+            return ['error' => 'retry'];
+        }
 
-        return $order ? ['order' => $order] : ['problem' => 'this shop could not record the order'];
+        return $got['order'] ? ['order' => $got['order']] : ['problem' => 'this shop could not record the order'];
     }
 
     /** Applies an /accept answer (or a bulk accept result) to a local order. */
@@ -1888,7 +1948,12 @@ class SudemiOrders
 
             return null;
         }
-        $order = self::createLocalOrder($pending, strtolower($sudemiId));
+        $got = self::obtainLocalOrder($pending, $sudemiId);
+        if ($got['state'] === 'busy' || $got['state'] === 'existing') {
+            // Busy: being built right now by another run, which books it; the change is read again.
+            return $got['order'];
+        }
+        $order = $got['order'];
         if (!$order) {
             SudemiLogger::error(sprintf('sudemi order %s was accepted on sudemi, but this shop could not record it (a product gone, or out of stock here). Book it by hand.', $sudemiId));
 

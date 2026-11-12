@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1
+
+- **A sudemi order can no longer become two PrestaShop orders.** Before, two accepts at the same
+  moment (a double click on Accept, a bulk accept, or an accept by hand while automatic
+  confirmation was answering) could each build the order and take the stock twice. Now the sudemi
+  order is claimed in the database (table `sudemi_order_claim`, made by the module on its own) before
+  the PrestaShop order is built, and only the one that claims it builds it.
+
 ## 1.3.0
 
 Orders, shipping and payouts managed from the PrestaShop back office (protocol 4d, core

@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.3.0');
+define('SUDEMI_VERSION', '1.3.1');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -25,6 +25,7 @@ require_once __DIR__ . '/classes/SudemiShipping.php';
 require_once __DIR__ . '/classes/SudemiWithdrawal.php';
 require_once __DIR__ . '/classes/SudemiCurrency.php';
 require_once __DIR__ . '/classes/SudemiSync.php';
+require_once __DIR__ . '/classes/SudemiClaims.php';
 require_once __DIR__ . '/classes/SudemiOrders.php';
 require_once __DIR__ . '/classes/SudemiHeartbeat.php';
 require_once __DIR__ . '/classes/SudemiSupport.php';
@@ -254,6 +255,7 @@ class Sudemi extends Module
         SudemiPairing::forget();
         SudemiOrders::uninstallTable();
         SudemiWithdrawal::uninstallTable();
+        SudemiClaims::uninstallTable();
         SudemiOrders::forgetSchema();
         SudemiLogger::clear();
         SudemiHeartbeat::forget();
