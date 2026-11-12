@@ -702,6 +702,8 @@ class SudemiSync
             $byCombination[(int) $row['id_product_attribute']][] = $row;
         }
         $link = Context::getContext()->link;
+        // Photos the shop assigned to each combination (the ones its storefront shows for it).
+        $combinationImages = $product->getCombinationImages($languageId);
         $listings = [];
         foreach ($byCombination as $paid => $attributes) {
             $first = $attributes[0];
@@ -725,6 +727,15 @@ class SudemiSync
                 return ['name' => (string) $a['group_name'], 'values' => [(string) $a['attribute_name']]];
             }, $attributes), $base['specs']);
             $item['shipping'] = SudemiShipping::ratesFor($product, $price);
+            // A combination with its own photos shows only those (a black pot is not shown with
+            // the white pot's photo); one without keeps all of the product's photos.
+            if (is_array($combinationImages) && !empty($combinationImages[$paid])) {
+                $own = [];
+                foreach ($combinationImages[$paid] as $image) {
+                    $own[] = $link->getImageLink($product->link_rewrite, $productId . '-' . (int) $image['id_image']);
+                }
+                $item['images'] = $own;
+            }
             $listings[] = $item;
         }
 

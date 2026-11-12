@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.3
+
+- **Each combination shows its own photos on sudemi.** A combination with photos assigned to it in
+  PrestaShop (Catalog > Products > Combinations > images) is now listed on sudemi with only those
+  photos, as the shop's own product page shows it. Before, every combination carried all of the
+  product's photos, so a black pot could be shown with the white pot's photo. A combination without
+  photos of its own keeps all of the product's photos, as before.
+
 ## 1.3.2
 
 - **Translations reviewed.** Every text in the 11 other languages was checked against the English:
