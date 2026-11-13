@@ -923,7 +923,38 @@ class SudemiAdminPages
             'icon' => $icon,
             'tagline' => $this->t['hdr_tagline'],
             'rtl' => $this->isRtl(),
+            'checkout' => $this->checkoutBanner(),
         ];
+    }
+
+    /**
+     * The checkout mode banner (1.4.1, docs/seller-modes.md), or null when sudemi did not say
+     * (not connected, not reachable, an older sudemi). Never breaks the page.
+     */
+    private function checkoutBanner()
+    {
+        try {
+            $m = SudemiInsights::checkout();
+            if ($m === null) {
+                return null;
+            }
+            switch ($m['mode']) {
+                case 'SUDEMI':
+                    return ['mode' => 'SUDEMI', 'kind' => 'ok', 'icon' => 'check_circle', 'title' => $this->t['mode_sudemi_title'],
+                        'text' => $this->t['mode_sudemi_text'], 'extra' => '', 'action' => '', 'url' => '', 'link' => '', 'link_url' => ''];
+                case 'SHOP':
+                    return ['mode' => 'SHOP', 'kind' => 'bad', 'icon' => 'error_outline', 'title' => $this->t['mode_shop_title'],
+                        'text' => $this->t['mode_shop_text'],
+                        'extra' => $m['reason'] === 'stripe_requirements_due' ? $this->t['mode_requirements'] : '',
+                        'action' => $m['url'] !== '' ? $this->t['mode_connect'] : '', 'url' => $m['url'], 'link' => '', 'link_url' => ''];
+                default:
+                    return ['mode' => 'SUSPENDED', 'kind' => 'bad', 'icon' => 'pause_circle_outline', 'title' => $this->t['mode_suspended_title'],
+                        'text' => $this->t['mode_suspended_text'], 'extra' => '', 'action' => '', 'url' => '',
+                        'link' => $this->t['mode_support'], 'link_url' => $this->url(self::SUPPORT)];
+            }
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function isRtl()

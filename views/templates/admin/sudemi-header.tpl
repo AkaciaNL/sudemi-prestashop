@@ -96,6 +96,22 @@
 .sudemi-ui code{ldelim}background:#f1f4f8;color:var(--sd-ink);border-radius:4px;padding:1px 6px{rdelim}
 .sudemi-ui .alert{ldelim}border-radius:10px{rdelim}
 .sudemi-section{ldelim}scroll-margin-top:90px{rdelim}
+.sudemi-mode{ldelim}display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid var(--sd-line);border-inline-start-width:4px;border-radius:10px;padding:14px 18px;margin:-8px 0 20px;background:#fff{rdelim}
+.sudemi-mode-bad{ldelim}background:var(--sd-bad-soft);border-color:#f3c4bf;border-inline-start-color:var(--sd-bad){rdelim}
+.sudemi-mode-ok{ldelim}background:var(--sd-ok-soft);border-color:#bfe2cf;border-inline-start-color:var(--sd-ok);padding:10px 18px{rdelim}
+.sudemi-mode > .material-icons{ldelim}font-size:24px;flex:0 0 auto{rdelim}
+.sudemi-mode-bad > .material-icons{ldelim}color:var(--sd-bad){rdelim}
+.sudemi-mode-ok > .material-icons{ldelim}color:var(--sd-ok);font-size:20px{rdelim}
+.sudemi-mode-body{ldelim}flex:1 1 320px;min-width:0{rdelim}
+.sudemi-mode-title{ldelim}margin:0;font-weight:600;color:var(--sd-ink){rdelim}
+.sudemi-mode-text{ldelim}margin:2px 0 0;color:var(--sd-muted){rdelim}
+.sudemi-mode-extra{ldelim}color:var(--sd-bad);font-weight:500{rdelim}
+.sudemi-mode-ok .sudemi-mode-title,.sudemi-mode-ok .sudemi-mode-text{ldelim}display:inline;margin:0{rdelim}
+.sudemi-mode-ok .sudemi-mode-text:before{ldelim}content:" \00b7  "{rdelim}
+.sudemi-ui .sudemi-mode-action{ldelim}flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--sd-bad);border-color:var(--sd-bad);color:#fff;font-weight:600;border-radius:6px;padding:7px 14px;text-decoration:none!important{rdelim}
+.sudemi-ui .sudemi-mode-action:hover,.sudemi-ui .sudemi-mode-action:focus{ldelim}background:#912018;border-color:#912018;color:#fff{rdelim}
+.sudemi-mode-action .material-icons{ldelim}font-size:16px{rdelim}
+.sudemi-ui .sudemi-mode-link{ldelim}flex:0 0 auto;font-weight:600;color:var(--sd-bad){rdelim}
 @media (max-width:1100px){ldelim}.sudemi-kpis{ldelim}grid-template-columns:repeat(2,minmax(0,1fr)){rdelim}.sudemi-grid2{ldelim}grid-template-columns:minmax(0,1fr){rdelim}{rdelim}
 @media (max-width:560px){ldelim}.sudemi-kpis{ldelim}grid-template-columns:minmax(0,1fr){rdelim}.sudemi-status{ldelim}text-align:start{rdelim}.sudemi-nav a span.lbl{ldelim}font-size:13px{rdelim}{rdelim}
 </style>
@@ -117,6 +133,19 @@
     <a href="{$n.url|escape:'html':'UTF-8'}" class="{if $n.active}active{/if}" data-page="{$n.key|escape:'html':'UTF-8'}"><i class="material-icons" aria-hidden="true">{$n.icon|escape:'html':'UTF-8'}</i><span class="lbl">{$n.label|escape:'html':'UTF-8'}</span></a>
   {/foreach}
 </nav>
+{if isset($sudemi_hdr.checkout) && $sudemi_hdr.checkout}
+  {assign var=sudemi_mode value=$sudemi_hdr.checkout}
+  <div class="sudemi-mode sudemi-mode-{$sudemi_mode.kind|escape:'html':'UTF-8'}" id="sudemi-checkout-mode" data-sudemi-checkout="{$sudemi_mode.mode|escape:'html':'UTF-8'}" role="{if $sudemi_mode.kind == 'ok'}status{else}alert{/if}">
+    <i class="material-icons" aria-hidden="true">{$sudemi_mode.icon|escape:'html':'UTF-8'}</i>
+    <div class="sudemi-mode-body">
+      <p class="sudemi-mode-title">{$sudemi_mode.title|escape:'html':'UTF-8'}</p>
+      <p class="sudemi-mode-text">{$sudemi_mode.text|escape:'html':'UTF-8'}</p>
+      {if $sudemi_mode.extra}<p class="sudemi-mode-text sudemi-mode-extra">{$sudemi_mode.extra|escape:'html':'UTF-8'}</p>{/if}
+    </div>
+    {if $sudemi_mode.action && $sudemi_mode.url}<a class="btn sudemi-mode-action" href="{$sudemi_mode.url|escape:'html':'UTF-8'}" target="_blank" rel="noopener noreferrer">{$sudemi_mode.action|escape:'html':'UTF-8'}<i class="material-icons" aria-hidden="true">open_in_new</i></a>{/if}
+    {if $sudemi_mode.link && $sudemi_mode.link_url}<a class="sudemi-mode-link" href="{$sudemi_mode.link_url|escape:'html':'UTF-8'}">{$sudemi_mode.link|escape:'html':'UTF-8'}</a>{/if}
+  </div>
+{/if}
 {foreach from=$sudemi_messages item=m}
   <div class="alert alert-{if $m.type == 'error'}danger{elseif $m.type == 'success'}success{elseif $m.type == 'info'}info{else}warning{/if} sudemi-message">{$m.text|escape:'html':'UTF-8'}</div>
 {/foreach}

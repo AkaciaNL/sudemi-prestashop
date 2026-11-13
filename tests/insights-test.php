@@ -87,9 +87,30 @@ preg_match_all( '/<rect x="([0-9.]+)"/', $rtl, $rtlX );
 check( 'chart: right-to-left draws the first day on the right', (float) $ltrX[1][0] < (float) $ltrX[1][2] && (float) $rtlX[1][0] > (float) $rtlX[1][2] );
 check( 'chart: no days still draws', false !== strpos( SudemiInsights::chart( [], 'a', 'b', 'x', 'y' ), '</svg>' ) );
 
+// Checkout mode banner (1.4.1).
+$url = 'https://sudemi.com/seller/payouts';
+check( 'mode B with reason and link', [ 'mode' => 'SHOP', 'reason' => 'stripe_requirements_due', 'url' => $url ] === SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SHOP', 'checkout_mode_reason' => 'stripe_requirements_due', 'stripe_connect_url' => $url ] ) );
+check( 'mode A, reason null', [ 'mode' => 'SUDEMI', 'reason' => '', 'url' => $url ] === SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SUDEMI', 'checkout_mode_reason' => null, 'stripe_connect_url' => $url ] ) );
+check( 'suspended', 'SUSPENDED' === SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SUSPENDED', 'checkout_mode_reason' => 'stripe_restricted' ] )['mode'] );
+check( 'an older sudemi (no checkout_mode): no banner', null === SudemiInsights::checkoutModel( [ 'shop_name' => 'x' ] ) );
+check( 'an unknown mode: no banner', null === SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SOMETHING' ] ) );
+check( 'not an object: no banner', null === SudemiInsights::checkoutModel( 'SHOP' ) && null === SudemiInsights::checkoutModel( [ 'checkout_mode' => [ 'SHOP' ] ] ) );
+check( 'an unknown reason is dropped', '' === SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SHOP', 'checkout_mode_reason' => 'new_reason' ] )['reason'] );
+check( 'a javascript: link is dropped', '' === SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SHOP', 'stripe_connect_url' => 'javascript:alert(1)' ] )['url'] );
+check( 'a link without scheme is dropped', '' === SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SHOP', 'stripe_connect_url' => '//evil.example/x' ] )['url'] );
+check( 'no link: empty', '' === SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SHOP', 'stripe_connect_url' => null ] )['url'] );
+$model = SudemiInsights::checkoutModel( [ 'checkout_mode' => 'SHOP', 'checkout_mode_reason' => 'stripe_not_connected', 'stripe_connect_url' => $url ] );
+$entry = SudemiInsights::checkoutEntry( $model, 1000 );
+check( 'cache: fresh entry gives the model', $model === SudemiInsights::cachedCheckout( $entry, 1059 ) );
+check( 'cache: after 60 seconds it is asked again', false === SudemiInsights::cachedCheckout( $entry, 1060 ) );
+check( 'cache: a failed read is kept as "none"', null === SudemiInsights::cachedCheckout( SudemiInsights::checkoutEntry( null, 1000 ), 1010 ) );
+check( 'cache: nothing stored', false === SudemiInsights::cachedCheckout( '', 1000 ) && false === SudemiInsights::cachedCheckout( 'garbage', 1000 ) );
+check( 'cache: a time in the future is not trusted', false === SudemiInsights::cachedCheckout( $entry, 900 ) );
+check( 'cache: a tampered mode gives no banner', null === SudemiInsights::cachedCheckout( '{"at":1000,"model":{"mode":"X"}}', 1001 ) );
+
 // Texts in every language.
 $keys = array_filter( array_keys( SudemiText::EN ), function ( $k ) {
-	return 0 === strpos( $k, 'nav_' ) || 0 === strpos( $k, 'kpi_' ) || 0 === strpos( $k, 'profile_' ) || 0 === strpos( $k, 'rs_' ) || 0 === strpos( $k, 'prod_' );
+	return 0 === strpos( $k, 'nav_' ) || 0 === strpos( $k, 'mode_' ) || 0 === strpos( $k, 'kpi_' ) || 0 === strpos( $k, 'profile_' ) || 0 === strpos( $k, 'rs_' ) || 0 === strpos( $k, 'prod_' );
 } );
 foreach ( [ 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he' ] as $lang ) {
 	$missing = [];
@@ -103,7 +124,7 @@ foreach ( [ 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he' ] a
 			$missing[] = $k . ' (placeholders)';
 		}
 	}
-	check( "1.4.0 texts in $lang", [] === $missing, $missing );
+	check( "1.4.0 and 1.4.1 texts in $lang", [] === $missing, $missing );
 }
 $all = '';
 foreach ( glob( __DIR__ . '/../translations/*.php' ) as $f ) {

@@ -29,6 +29,17 @@ class SudemiInsights
     const CONF_SUPPORT_EMAIL = 'SUDEMI_PROFILE_SUPPORT_EMAIL';
     const CONF_RETURNS_DAYS = 'SUDEMI_PROFILE_RETURNS_DAYS';
 
+    // Checkout mode (1.4.1, docs/seller-modes.md): which checkout this shop's offers use, shown on
+    // every sudemi page. Kept for CHECKOUT_TTL seconds (a failed read too, as "none"), so the
+    // banner costs at most one call a minute against the shop's 120 calls a minute.
+    const CONF_CHECKOUT = 'SUDEMI_CHECKOUT_MODE';
+    const CHECKOUT_TTL = 60;
+    const CHECKOUT_MODES = ['SUDEMI', 'SHOP', 'SUSPENDED'];
+    const CHECKOUT_REASONS = ['stripe_not_connected', 'stripe_requirements_due', 'stripe_restricted'];
+
+    /** GET /shop of this request, shared by the page header and the Shop profile page. */
+    private static $shopRead = null;
+
     // ----------------------------------------------------------------- calls ----
 
     /** @return array{ok:bool,stats?:array,error?:string} */
@@ -73,7 +84,43 @@ class SudemiInsights
     /** @return array{ok:bool,shop?:array,error?:string} */
     public static function shop()
     {
-        return self::get('/integration/v1/shop', 'shop');
+        if (self::$shopRead === null) {
+            self::$shopRead = self::get('/integration/v1/shop', 'shop');
+            self::rememberCheckout(self::$shopRead['ok'] ? self::checkoutModel(self::$shopRead['shop']) : null);
+        }
+
+        return self::$shopRead;
+    }
+
+    /**
+     * The checkout mode for the banner: ['mode', 'reason', 'url'], or null (not connected, sudemi
+     * not reachable, or a sudemi without checkout modes). Never throws.
+     */
+    public static function checkout()
+    {
+        try {
+            if (!SudemiClient::isConnected()) {
+                return null;
+            }
+            $cached = self::cachedCheckout((string) Configuration::get(self::CONF_CHECKOUT), time());
+            if ($cached !== false) {
+                return $cached;
+            }
+            $read = self::shop();
+
+            return $read['ok'] ? self::checkoutModel($read['shop']) : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private static function rememberCheckout($model)
+    {
+        try {
+            Configuration::updateValue(self::CONF_CHECKOUT, self::checkoutEntry($model, time()));
+        } catch (\Throwable $e) {
+            // Only a cache: the next page asks sudemi again.
+        }
     }
 
     /**
@@ -92,6 +139,7 @@ class SudemiInsights
             'supportEmail' => $profile['support_email'],
             'returnsWindowDays' => (int) $profile['returns_window_days'],
         ];
+        self::$shopRead = null;
         $response = SudemiClient::sendSigned('POST', '/integration/v1/shop', $body);
         if (!is_array($response) || (int) $response['status'] !== 200) {
             return [
@@ -161,6 +209,60 @@ class SudemiInsights
         $to = new DateTimeImmutable($today, new DateTimeZone('UTC'));
 
         return [$to->modify('-' . ($days - 1) . ' days')->format('Y-m-d'), $to->format('Y-m-d')];
+    }
+
+    /**
+     * The banner model from a GET /shop body: null without a known checkout_mode (an older sudemi
+     * or an unexpected answer). The reason is kept only when known, the Stripe link only when it
+     * is an http(s) address.
+     *
+     * @return array{mode:string,reason:string,url:string}|null
+     */
+    public static function checkoutModel($shop)
+    {
+        if (!is_array($shop) || !isset($shop['checkout_mode']) || !is_string($shop['checkout_mode'])) {
+            return null;
+        }
+        $mode = strtoupper(trim($shop['checkout_mode']));
+        if (!in_array($mode, self::CHECKOUT_MODES, true)) {
+            return null;
+        }
+        $reason = isset($shop['checkout_mode_reason']) && is_string($shop['checkout_mode_reason'])
+            && in_array($shop['checkout_mode_reason'], self::CHECKOUT_REASONS, true) ? $shop['checkout_mode_reason'] : '';
+        $url = isset($shop['stripe_connect_url']) && is_string($shop['stripe_connect_url']) ? trim($shop['stripe_connect_url']) : '';
+        if ($url !== '' && (!preg_match('#^https?://[^\s/?\#]+#i', $url) || filter_var($url, FILTER_VALIDATE_URL) === false || strlen($url) > 2000)) {
+            $url = '';
+        }
+
+        return ['mode' => $mode, 'reason' => $reason, 'url' => $url];
+    }
+
+    /** What is kept between pages: the model (or none) and when it was read. Pure. */
+    public static function checkoutEntry($model, $now)
+    {
+        return (string) json_encode(['at' => (int) $now, 'model' => $model]);
+    }
+
+    /**
+     * The kept model while it is fresh: the model, null for "none", false when there is nothing
+     * fresh to use (absent, broken, older than CHECKOUT_TTL or from the future). Pure.
+     */
+    public static function cachedCheckout($stored, $now)
+    {
+        $entry = json_decode((string) $stored, true);
+        if (!is_array($entry) || !isset($entry['at']) || !is_int($entry['at']) || !array_key_exists('model', $entry)) {
+            return false;
+        }
+        $age = (int) $now - $entry['at'];
+        if ($age < 0 || $age >= self::CHECKOUT_TTL) {
+            return false;
+        }
+
+        return $entry['model'] === null ? null : self::checkoutModel(is_array($entry['model']) ? [
+            'checkout_mode' => isset($entry['model']['mode']) ? $entry['model']['mode'] : null,
+            'checkout_mode_reason' => isset($entry['model']['reason']) ? $entry['model']['reason'] : null,
+            'stripe_connect_url' => isset($entry['model']['url']) ? $entry['model']['url'] : null,
+        ] : null);
     }
 
     /** '' when the profile can be saved, else the error key (shown in the page's language). */

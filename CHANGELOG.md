@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.1
+
+- **Checkout mode on every sudemi page**, under the sudemi menu, as sudemi reports it for the
+  company (GET /integration/v1/shop, `checkout_mode`):
+  - Stripe not connected (the shop's own checkout): a red banner "Stripe is not connected. Your
+    products are listed on sudemi, Connect Stripe" with a **Connect Stripe** button that opens
+    the seller portal's payout page in a new tab. When Stripe only needs more information, one
+    more line says so.
+  - Stripe connected (payment through sudemi): a slim green "Connect Stripe is done".
+  - Paused while sudemi reviews a payment provider restriction: a red banner with a link to the
+    Help and support page.
+  Nothing is shown when sudemi cannot be reached or does not report a mode, and the page works as
+  before. The answer is kept for 60 seconds (the Shop profile page reuses the same call), so the
+  banner adds at most one call a minute.
+- All new texts in the 12 languages of the module.
+
 ## 1.4.0
 
 - **A sudemi menu of its own in the left sidebar** (Sell section): Dashboard, Products on sudemi,
