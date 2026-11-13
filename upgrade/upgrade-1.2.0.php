@@ -1,8 +1,13 @@
 <?php
+
 /**
  * 1.2.0: shipping prices come from the carriers, so a carrier change must re-send the catalogue.
  * Existing installs register the new hooks here (install() only runs on a fresh install), and
  * the catalogue is sent once so every product gets its shipping prices and delivery times.
+ *
+ * @author    Akacia
+ * @copyright Akacia
+ * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
 if (!defined('_PS_VERSION_')) {
     exit;

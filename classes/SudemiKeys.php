@@ -1,21 +1,23 @@
 <?php
+
 /**
  * The shop's signing key.
  *
  * Generated on this host and never sent anywhere. sudemi receives the public half only, which
  * is why a breach of their database cannot produce a signature for this shop.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiKeys
 {
-    const CONF_SECRET = 'SUDEMI_SIGNING_SECRET';
-    const CONF_PUBLIC = 'SUDEMI_SIGNING_PUBLIC';
+    public const CONF_SECRET = 'SUDEMI_SIGNING_SECRET';
+    public const CONF_PUBLIC = 'SUDEMI_SIGNING_PUBLIC';
 
     /**
      * Whether this host can sign at all. Checked before anything is offered, so a host without

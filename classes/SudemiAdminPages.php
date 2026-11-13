@@ -1,4 +1,5 @@
 <?php
+
 /**
  * The sudemi Orders and Shipping pages of the back office (controllers/admin), and the sudemi
  * block on PrestaShop's own order page.
@@ -7,28 +8,29 @@
  * (SudemiChanges::refresh). Every action checks the employee's permission and a CSRF token
  * before anything is sent; everything printed is escaped by the templates.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiAdminPages
 {
-    const ORDERS = 'AdminSudemiOrders';
-    const SHIPPING = 'AdminSudemiShipping';
+    public const ORDERS = 'AdminSudemiOrders';
+    public const SHIPPING = 'AdminSudemiShipping';
     // 1.4.0: the sudemi menu of its own in the left sidebar (PARENT), with these pages.
-    const PARENT = 'AdminSudemi';
-    const DASHBOARD = 'AdminSudemiDashboard';
-    const PRODUCTS = 'AdminSudemiProducts';
-    const PAYOUTS = 'AdminSudemiPayouts';
-    const PROFILE = 'AdminSudemiProfile';
-    const SUPPORT = 'AdminSudemiSupport';
-    const SETTINGS = 'AdminSudemiSettings';
+    public const PARENT = 'AdminSudemi';
+    public const DASHBOARD = 'AdminSudemiDashboard';
+    public const PRODUCTS = 'AdminSudemiProducts';
+    public const PAYOUTS = 'AdminSudemiPayouts';
+    public const PROFILE = 'AdminSudemiProfile';
+    public const SUPPORT = 'AdminSudemiSupport';
+    public const SETTINGS = 'AdminSudemiSettings';
 
     /** The pages in menu order: [tab class, text key, Material icon of the page title]. */
-    const MENU = [
+    public const MENU = [
         ['AdminSudemiDashboard', 'nav_dashboard', 'insights'],
         ['AdminSudemiProducts', 'nav_products', 'inventory_2'],
         ['AdminSudemiOrders', 'nav_orders', 'receipt_long'],
@@ -92,7 +94,7 @@ class SudemiAdminPages
     {
         try {
             $url = (string) $this->context->link->getAdminLink($controller, true, [], $params);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $url = '';
         }
         if ($url !== '') {
@@ -438,7 +440,7 @@ class SudemiAdminPages
             $events[] = [
                 'at' => isset($e['at']) ? $this->time($e['at']) : '',
                 'title' => isset($this->t['ev_' . $type]) ? $this->t['ev_' . $type] : $type,
-                'detail' => implode(' / ', array_filter($parts, 'strlen')),
+                'detail' => implode(' / ', array_filter($parts, [__CLASS__, 'notEmpty'])),
             ];
         }
         $payout = isset($o['payout']) && is_array($o['payout']) ? $o['payout'] : null;
@@ -466,7 +468,7 @@ class SudemiAdminPages
                 $this->t['shipped_at'] => !empty($o['shipped_at']) ? $this->time($o['shipped_at']) : '',
                 $this->t['delivered_at'] => !empty($o['delivered_at']) ? $this->time($o['delivered_at']) : '',
                 $this->t['withdrawal'] => !empty($o['withdrawal_deadline']) ? $this->time($o['withdrawal_deadline']) : '',
-            ], 'strlen'),
+            ], [__CLASS__, 'notEmpty']),
             'local_ref' => $local ? (string) $local->reference : '',
             'local_url' => $local ? $this->url('AdminOrders', ['id_order' => (int) $local->id, 'vieworder' => 1]) : '',
             'lines' => $lines,
@@ -477,13 +479,13 @@ class SudemiAdminPages
                 $this->t['commission'] => $fmt(isset($money['commission_minor']) ? $money['commission_minor'] : null),
                 $this->t['you_receive'] => $fmt(isset($money['your_net_minor']) ? $money['your_net_minor'] : null),
                 $this->t['refunded'] => !empty($money['refunded_minor']) ? $fmt($money['refunded_minor']) : '',
-            ], 'strlen'),
+            ], [__CLASS__, 'notEmpty']),
             'payout' => $payout ? array_filter([
                 $this->t['payout_state'] => isset($payout['state'], $this->t['po_' . $payout['state']]) ? $this->t['po_' . $payout['state']] : (isset($payout['state']) ? (string) $payout['state'] : ''),
                 $this->t['payout_expected'] => isset($payout['expected_minor']) ? $fmt($payout['expected_minor'], $payoutCode) : '',
                 $this->t['payout_paid'] => isset($payout['paid_out_minor']) ? $fmt($payout['paid_out_minor'], $payoutCode) : '',
                 $this->t['payout_due'] => !empty($payout['due_at']) ? $this->time($payout['due_at']) : '',
-            ], 'strlen') : [],
+            ], [__CLASS__, 'notEmpty']) : [],
             'payout_note' => $payout && !empty($payout['converted']) ? sprintf($this->t['payout_converted'], $payoutCode) : '',
             'request' => $request ? [
                 'kind' => isset($request['kind']) && $request['kind'] === 'RETURN' ? $this->t['request_return'] : $this->t['request_cancellation'],
@@ -864,7 +866,7 @@ class SudemiAdminPages
     {
         try {
             $url = (string) $this->context->link->getAdminLink('AdminModules', true, [], ['configure' => 'sudemi']);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $url = '';
         }
 
@@ -952,7 +954,7 @@ class SudemiAdminPages
                         'text' => $this->t['mode_suspended_text'], 'extra' => '', 'action' => '', 'url' => '',
                         'link' => $this->t['mode_support'], 'link_url' => $this->url(self::SUPPORT)];
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return null;
         }
     }
@@ -1165,7 +1167,7 @@ class SudemiAdminPages
     {
         try {
             return (string) $this->context->link->getAdminLink('AdminProducts', true, ['id_product' => (int) $productId], ['id_product' => (int) $productId, 'updateproduct' => 1]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return '';
         }
     }
@@ -1248,5 +1250,11 @@ class SudemiAdminPages
             'rename_url' => $supportUrl,
             'self_url' => $this->url(self::PROFILE),
         ], self::PROFILE);
+    }
+
+    /** For array_filter: keeps every value that is not an empty string (as strlen did). */
+    public static function notEmpty($value)
+    {
+        return strlen((string) $value) > 0;
     }
 }

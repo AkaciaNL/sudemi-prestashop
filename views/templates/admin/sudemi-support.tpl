@@ -3,6 +3,8 @@
  * are plain text from sudemi: escaped, never HTML, with line breaks kept by white-space:pre-wrap.
  * $sudemi_output is PrestaShop's own confirmation/error markup for the action just taken.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-support-page">

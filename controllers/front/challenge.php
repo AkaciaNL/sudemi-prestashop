@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Serves the ownership challenge.
  *
@@ -10,9 +11,10 @@
  * well-known path reaches it, because the platform asks for a fixed path and will not follow a
  * shop-specific one.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }

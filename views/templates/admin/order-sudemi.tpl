@@ -5,6 +5,8 @@
  * before anything is sent; paid: sent as shipped with the tracking, shipped: the tracking is
  * corrected).
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="card mt-2 panel" id="sudemi-order-block">

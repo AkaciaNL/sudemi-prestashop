@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Keeping the PrestaShop copy of each sudemi order current (protocol 4d, the change feed).
  *
@@ -13,9 +14,10 @@
  * own (SudemiOrders::setState), so the status hook never sends them back to sudemi, and without
  * any e-mail (plugins never send e-mail).
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
@@ -23,18 +25,18 @@ if (!defined('_PS_VERSION_')) {
 class SudemiChanges
 {
     /** JSON {install, cursor}: the cursor belongs to one install and starts over after re-pairing. */
-    const CONF_CURSOR = 'SUDEMI_CHANGES_CURSOR';
+    public const CONF_CURSOR = 'SUDEMI_CHANGES_CURSOR';
     /** When the feed started (unix time): orders placed before it are never booked here by the feed. */
-    const CONF_SINCE = 'SUDEMI_CHANGES_SINCE';
-    const CONF_DAILY = 'SUDEMI_ORDERS_CHECKED_AT';
+    public const CONF_SINCE = 'SUDEMI_CHANGES_SINCE';
+    public const CONF_DAILY = 'SUDEMI_ORDERS_CHECKED_AT';
 
     /** Further beats sent at once while sudemi says there is more (200 entries each). */
-    const MORE_BEATS = 5;
-    const DAILY_SECONDS = 86400;
-    const DAILY_PAGES = 10;
+    public const MORE_BEATS = 5;
+    public const DAILY_SECONDS = 86400;
+    public const DAILY_PAGES = 10;
 
     /** The length of PrestaShop's tracking number fields (order_carrier.tracking_number, orders.shipping_number). */
-    const PS_TRACKING_MAX = 64;
+    public const PS_TRACKING_MAX = 64;
 
     /** A tracking number as PrestaShop can hold it (trimmed, at most PS_TRACKING_MAX characters). Pure. */
     public static function psTracking($code)
@@ -45,7 +47,7 @@ class SudemiChanges
     }
 
     /** Statuses for which the shop has (or should have) an order to fulfil. */
-    const BOOKED = ['ACCEPTED', 'PAID', 'SHIPPED', 'DELIVERED'];
+    public const BOOKED = ['ACCEPTED', 'PAID', 'SHIPPED', 'DELIVERED'];
 
     /** The cursor to send on the next heartbeat ('' to start). */
     public static function cursor()
@@ -118,7 +120,7 @@ class SudemiChanges
                 if (!self::apply($entry)) {
                     $failure = 'not applied (sudemi or the shop could not be read)';
                 }
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $failure = $e->getMessage();
             }
             $sudemiId = strtolower((string) $entry['order_id']);
@@ -143,10 +145,10 @@ class SudemiChanges
      * What one entry asks of the local order, as a list of steps. Pure, so it can be tested
      * without PrestaShop.
      *
-     * @param array      $entry  one changed_orders entry (or a row of GET /orders)
-     * @param array|null $local  null when there is no local order; otherwise
-     *                           ['revision' => int|null, 'state' => prep|paid|shipped|delivered|cancelled|refunded,
-     *                            'tracking' => string, 'refunded' => int]
+     * @param array $entry one changed_orders entry (or a row of GET /orders)
+     * @param array|null $local null when there is no local order; otherwise
+     *                          ['revision' => int|null, 'state' => prep|paid|shipped|delivered|cancelled|refunded,
+     *                          'tracking' => string, 'refunded' => int]
      *
      * @return string[] import, pay, release, cancel, ship, deliver, refunded, tracking, refund_note, remember
      */
@@ -261,13 +263,13 @@ class SudemiChanges
     // ------------------------------------------------- changes that could not be applied ----
 
     /** JSON {install, orders: {sudemi id: {attempts, first, last, error}}}. */
-    const CONF_RETRY = 'SUDEMI_CHANGES_RETRY';
+    public const CONF_RETRY = 'SUDEMI_CHANGES_RETRY';
     /** Re-fetches per order before giving up (one per heartbeat at most). */
-    const RETRY_MAX_ATTEMPTS = 10;
+    public const RETRY_MAX_ATTEMPTS = 10;
     /** And at most this long (3 days) after the change first failed. */
-    const RETRY_MAX_AGE = 259200;
-    const RETRY_PER_BEAT = 20;
-    const RETRY_MAX = 500;
+    public const RETRY_MAX_AGE = 259200;
+    public const RETRY_PER_BEAT = 20;
+    public const RETRY_MAX = 500;
 
     /** The orders whose change waits to be applied again, for this install. */
     public static function retries()
@@ -341,7 +343,7 @@ class SudemiChanges
      * no such order for this shop. Never touches the cursor.
      *
      * @param callable|null $apply stands in for apply() in tests
-     * @param int|null      $now   unix time (tests)
+     * @param int|null $now unix time (tests)
      */
     public static function retryFailed($apply = null, $now = null)
     {
@@ -372,7 +374,7 @@ class SudemiChanges
                 } elseif (!call_user_func($apply, self::entryOf($detail['order']))) {
                     $error = 'not applied (sudemi or the shop could not be read)';
                 }
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $error = $e->getMessage();
             }
             if ($error === null) {
@@ -570,7 +572,7 @@ class SudemiChanges
                 if (is_array($row) && !empty($row['order_id']) && isset($row['revision'])) {
                     try {
                         self::apply(self::entryOf($row));
-                    } catch (\Throwable $e) {
+                    } catch (Throwable $e) {
                         SudemiLogger::warn(sprintf('Could not apply sudemi order %s: %s', (string) $row['order_id'], $e->getMessage()));
                     }
                 }

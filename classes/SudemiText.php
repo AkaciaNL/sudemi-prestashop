@@ -1,4 +1,5 @@
 <?php
+
 /**
  * The texts of the sudemi Orders and Shipping pages, of the order page block and of the notes the
  * module writes on PrestaShop orders, in English.
@@ -7,16 +8,17 @@
  * like every other text of this module: Module::l() looks each one up in the employee's
  * language. Kept in one list so a test can check that all 12 languages have every text.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiText
 {
-    const EN = [
+    public const EN = [
         // statuses (shared with the module page's order history)
         'st_AWAITING_SELLER' => 'Waiting for you - buyer not charged',
         'st_ACCEPTED' => 'Accepted - waiting for the other shops in the buyer\'s payment; buyer not charged yet, do not ship',

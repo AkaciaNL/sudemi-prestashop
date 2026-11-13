@@ -2,6 +2,8 @@
  * Orders > sudemi orders: payouts, filters, the order table with its bulk actions, the export.
  * Everything printed is escaped; the forms carry the module's CSRF token.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-orders">

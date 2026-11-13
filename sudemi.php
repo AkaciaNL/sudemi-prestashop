@@ -1,4 +1,5 @@
 <?php
+
 /**
  * sudemi Connector for PrestaShop.
  *
@@ -9,12 +10,11 @@
  * @copyright Akacia
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.4.1');
+define('SUDEMI_VERSION', '1.4.2');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -43,6 +43,7 @@ class Sudemi extends Module
 
     /** Set once a ticket or reply went through, so the form is shown empty again. */
     private $supportSent = false;
+
     public function __construct()
     {
         $this->name = 'sudemi';
@@ -64,7 +65,7 @@ class Sudemi extends Module
             if (defined('_PS_ADMIN_DIR_') && Configuration::get(self::CONF_SETUP) !== SUDEMI_VERSION) {
                 try {
                     $this->ensureAdminSetup();
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     SudemiLogger::warn('Could not check the sudemi menu: ' . $e->getMessage());
                 }
             }
@@ -136,7 +137,7 @@ class Sudemi extends Module
             if (Validate::isLoadedObject($order)) {
                 SudemiOrders::trackingChanged($order);
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             SudemiLogger::warn('Could not send the tracking number of order ' . (int) $orderId . ' to sudemi: ' . $e->getMessage());
         }
     }
@@ -166,7 +167,7 @@ class Sudemi extends Module
                 $tab = new Tab($id);
                 if ((int) $tab->id_parent !== $parentId || !$tab->active) {
                     $tab->id_parent = $parentId;
-                    $tab->active = 1;
+                    $tab->active = true;
                     $tab->update();
                 }
                 continue;
@@ -180,7 +181,7 @@ class Sudemi extends Module
     }
 
     /** The pages of the sudemi menu, in order, with their names in the module's languages. */
-    const TAB_NAMES = [
+    public const TAB_NAMES = [
         'AdminSudemiDashboard' => ['en' => 'Dashboard', 'nl' => 'Dashboard', 'tr' => 'Genel bakış', 'de' => 'Übersicht', 'fr' => 'Tableau de bord', 'es' => 'Panel', 'it' => 'Panoramica', 'pl' => 'Pulpit', 'ru' => 'Обзор', 'zh' => '概览', 'ar' => 'نظرة عامة', 'he' => 'סקירה'],
         'AdminSudemiProducts' => ['en' => 'Products on sudemi', 'nl' => 'Producten op sudemi', 'tr' => 'sudemi\'deki ürünler', 'de' => 'Produkte auf sudemi', 'fr' => 'Produits sur sudemi', 'es' => 'Productos en sudemi', 'it' => 'Prodotti su sudemi', 'pl' => 'Produkty w sudemi', 'ru' => 'Товары на sudemi', 'zh' => 'sudemi 上的商品', 'ar' => 'المنتجات على sudemi', 'he' => 'מוצרים ב-sudemi'],
         'AdminSudemiOrders' => ['en' => 'Orders', 'nl' => 'Bestellingen', 'tr' => 'Siparişler', 'de' => 'Bestellungen', 'fr' => 'Commandes', 'es' => 'Pedidos', 'it' => 'Ordini', 'pl' => 'Zamówienia', 'ru' => 'Заказы', 'zh' => '订单', 'ar' => 'الطلبات', 'he' => 'הזמנות'],
@@ -198,7 +199,7 @@ class Sudemi extends Module
         $tab->class_name = $class;
         $tab->module = $this->name;
         $tab->id_parent = (int) $parentId;
-        $tab->active = 1;
+        $tab->active = true;
         if ($icon !== '' && property_exists($tab, 'icon')) {
             $tab->icon = $icon;
         }
@@ -222,7 +223,7 @@ class Sudemi extends Module
     }
 
     /** Set to the module version once the menu and hooks were checked for it. */
-    const CONF_SETUP = 'SUDEMI_SETUP_VERSION';
+    public const CONF_SETUP = 'SUDEMI_SETUP_VERSION';
 
     /**
      * Makes sure the sudemi menu and every hook are there (1.4.0).
@@ -383,7 +384,7 @@ class Sudemi extends Module
         foreach ($this->withdrawalLabels() as $value => $label) {
             $choices[$label] = $value;
         }
-        $tab->add(SudemiWithdrawal::FIELD, \Symfony\Component\Form\Extension\Core\Type\ChoiceType::class, [
+        $tab->add(SudemiWithdrawal::FIELD, Symfony\Component\Form\Extension\Core\Type\ChoiceType::class, [
             'label' => $this->l('Right of withdrawal'),
             'help' => $this->l('Only for products that legally fall under an exception. Buyers see it before paying; misuse is not allowed.'),
             'choices' => $choices,
@@ -1091,7 +1092,7 @@ class Sudemi extends Module
     {
         try {
             $url = (string) $this->context->link->getAdminLink($controller, true, [], $params);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $url = '';
         }
         if ($url !== '') {

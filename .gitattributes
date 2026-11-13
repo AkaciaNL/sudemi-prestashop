@@ -2,6 +2,7 @@
 # developer documentation. Shops get the module, its changelog and the licence.
 /tests export-ignore
 /.github export-ignore
+/.addons export-ignore
 /.gitignore export-ignore
 /.gitattributes export-ignore
 /PROTOCOL.md export-ignore

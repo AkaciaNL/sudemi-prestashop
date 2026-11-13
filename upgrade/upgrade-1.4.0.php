@@ -1,4 +1,5 @@
 <?php
+
 /**
  * 1.4.0: the sudemi menu in the left sidebar (Dashboard, Products on sudemi, Orders, Shipping
  * costs, Payouts, Shop profile, Help and support, Settings). The Orders and Shipping pages move
@@ -8,9 +9,10 @@
  * and the missing ones added (a PrestaShop 9 shop upgraded to 1.3.0 had neither the Orders and
  * Shipping pages nor the tracking hooks: "The controller AdminSudemiOrders is missing or invalid").
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }

@@ -1,31 +1,33 @@
 <?php
+
 /**
  * Every call this shop makes to sudemi, signed.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiClient
 {
-    const CONF_INSTALL_ID = 'SUDEMI_INSTALL_ID';
-    const CONF_API_BASE = 'SUDEMI_API_BASE';
+    public const CONF_INSTALL_ID = 'SUDEMI_INSTALL_ID';
+    public const CONF_API_BASE = 'SUDEMI_API_BASE';
 
-    const DEFAULT_API_BASE = 'https://api.sudemi.com';
+    public const DEFAULT_API_BASE = 'https://api.sudemi.com';
     /**
      * How many times to wait when sudemi says this shop is pushing too fast. Two, because the
      * window is a minute: a shop still throttled after two waits is sending far more than the
      * limit and should resume on its next run rather than hold a cron slot open.
      */
-    const RATE_LIMIT_RETRIES = 2;
+    public const RATE_LIMIT_RETRIES = 2;
 
     /** A cap, so a strange Retry-After cannot park a cron run for an hour. */
-    const RATE_LIMIT_MAX_WAIT = 90;
+    public const RATE_LIMIT_MAX_WAIT = 90;
 
-    const TIMEOUT_SECONDS = 20;
+    public const TIMEOUT_SECONDS = 20;
 
     /**
      * Test seam, never set in production: when a callable, every call goes through it as
@@ -36,7 +38,7 @@ class SudemiClient
      *
      * @var callable|null
      */
-    public static $interceptor = null;
+    public static $interceptor;
 
     public static function apiBase()
     {
@@ -106,7 +108,7 @@ class SudemiClient
      * A signed GET whose answer is not JSON (the CSV export): the body as it came, with the
      * status and the headers the caller needs (content type, file name, row counts).
      *
-     * @return array{status:int,raw:string,headers:array}|null null when sudemi could not be reached
+     * @return array{status:int,raw?:string,headers?:array}|null null when sudemi could not be reached
      */
     public static function getRaw($path)
     {
@@ -181,7 +183,7 @@ class SudemiClient
     {
         try {
             $url = (string) SudemiPairing::shopUrl();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return '';
         }
 
@@ -212,7 +214,7 @@ class SudemiClient
     }
 
     /**
-     * @return array{status:int,body:array}|null null when the call could not be made at all
+     * @return array{status:int,body?:array,raw?:string,headers?:array,retry_after?:int}|null null when the call could not be made at all
      */
     private static function request($path, array $body, $signed, $method = 'POST', array $extra = [], $rawAnswer = false)
     {

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Price changes that have not reached sudemi yet.
  *
@@ -11,19 +12,20 @@
  * Keyed by product id, so twenty saves of one product while sudemi is unreachable leave one
  * entry carrying the newest price rather than twenty carrying a history nobody wants.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiQueue
 {
-    const CONF = 'SUDEMI_PENDING_PRICES';
+    public const CONF = 'SUDEMI_PENDING_PRICES';
 
     /** A cap, because an unbounded configuration row is a way to make a shop unloadable. */
-    const MAX_ENTRIES = 2000;
+    public const MAX_ENTRIES = 2000;
 
     public static function enqueue(array $update)
     {
@@ -114,7 +116,7 @@ class SudemiQueue
     }
 
     /** Statuses that refuse a batch for good: retrying the same batch cannot succeed. */
-    const REFUSED = [400, 403, 413, 422];
+    public const REFUSED = [400, 403, 413, 422];
 
     /**
      * The queue minus the entries that were sent, where they are unchanged since. Pure, so it can

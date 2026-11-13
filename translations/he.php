@@ -1,7 +1,18 @@
 <?php
 
+/**
+ * sudemi Connector for PrestaShop.
+ *
+ * @author    Akacia
+ * @copyright Akacia
+ * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
+ */
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
 global $_MODULE;
-$_MODULE = array();
+$_MODULE = [];
 $_MODULE['<{sudemi}prestashop>sudemi_d80cf3c6c3223161df426910c9de3567'] = 'מחבר sudemi';
 $_MODULE['<{sudemi}prestashop>sudemi_3ee935f006929a22571df7926d7ce7ea'] = 'הצגת הקטלוג שלכם ב-sudemi, כך שעוזר בינה מלאכותית יוכל למצוא את המוצרים שלכם ולשלוח אליכם קונים.';
 $_MODULE['<{sudemi}prestashop>sudemi_3ef719be3fcfc231dedf3a4214d49fef'] = 'פעולה זו מסירה את מפתח החתימה ומנתקת את החנות מ-sudemi. להמשיך?';

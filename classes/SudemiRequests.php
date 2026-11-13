@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Return requests from buyers, and this shop's answer to them.
  *
@@ -12,31 +13,32 @@
  * replaced each beat: nothing has to be tracked, and a request answered elsewhere (the sudemi
  * portal, or by sudemi after the deadline) disappears here on the next beat.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiRequests
 {
-    const CONF_OPEN = 'SUDEMI_OPEN_REQUESTS';
+    public const CONF_OPEN = 'SUDEMI_OPEN_REQUESTS';
 
     /** sudemi answers at most 200; more than that would not fit a Configuration value anyway. */
-    const MAX_STORED = 200;
+    public const MAX_STORED = 200;
 
     /** Longest buyer reason kept, and longest rejection reason sent. */
-    const MAX_REASON = 1000;
+    public const MAX_REASON = 1000;
 
-    const OK = 'ok';
-    const ALREADY = 'already_resolved';
-    const NOT_FOUND = 'not_found';
-    const INVALID = 'invalid_request';
-    const REASON_REQUIRED = 'reason_required';
-    const UNREACHABLE = 'unreachable';
-    const SITE = 'site_mismatch';
-    const FAILED = 'failed';
+    public const OK = 'ok';
+    public const ALREADY = 'already_resolved';
+    public const NOT_FOUND = 'not_found';
+    public const INVALID = 'invalid_request';
+    public const REASON_REQUIRED = 'reason_required';
+    public const UNREACHABLE = 'unreachable';
+    public const SITE = 'site_mismatch';
+    public const FAILED = 'failed';
 
     /**
      * Replaces the stored list with what the heartbeat carried. Anything that is not a well-formed
@@ -121,7 +123,7 @@ class SudemiRequests
      * now, done before, or none at all), so the page stops offering buttons that cannot work.
      *
      * @param string $sudemiId the sudemi order id
-     * @param bool   $accept
+     * @param bool $accept
      * @param string|null $reason required (non-blank) to reject; optional note to accept
      *
      * @return array{ok:bool,outcome:string}

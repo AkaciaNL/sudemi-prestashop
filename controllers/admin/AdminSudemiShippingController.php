@@ -1,12 +1,14 @@
 <?php
+
 /**
  * sudemi > Shipping: what sudemi buyers pay for shipping per country (GET/POST
  * /integration/v1/shipping), filled in from this shop's carriers on request. The page itself is
  * SudemiAdminPages; this controller only routes.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }

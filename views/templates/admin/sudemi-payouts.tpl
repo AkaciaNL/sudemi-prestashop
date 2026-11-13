@@ -2,6 +2,8 @@
  * sudemi > Payouts (1.4.0): what sudemi paid this shop and what is still due (GET /payouts).
  * Everything printed is escaped.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-payouts-page">

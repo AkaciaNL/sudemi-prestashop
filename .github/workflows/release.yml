@@ -48,7 +48,7 @@ jobs:
           python3 -c 'import sys, zipfile; print("\n".join(zipfile.ZipFile(sys.argv[1]).namelist()))' "$zip" > files.txt
           grep -vq '^sudemi/' files.txt && { echo "file outside sudemi/"; exit 1; } || true
           grep -q '^sudemi/sudemi.php$' files.txt || { echo "module main file missing"; exit 1; }
-          grep -Eq '^sudemi/(tests|\.github)/|\.git(ignore|attributes)$' files.txt && { echo "dev files in the zip"; exit 1; } || true
+          grep -Eq '^sudemi/(tests|\.github|\.addons)/|\.git(ignore|attributes)$' files.txt && { echo "dev files in the zip"; exit 1; } || true
           sha256sum "$zip" > "$zip.sha256"
           cat "$zip.sha256"; ls -l "$zip"
           echo "ZIP=$zip" >> "$GITHUB_ENV"

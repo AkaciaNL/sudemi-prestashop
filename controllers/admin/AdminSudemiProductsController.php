@@ -1,11 +1,13 @@
 <?php
+
 /**
  * sudemi > Products on sudemi (1.4.0): the shop's products as sudemi lists them, and the
  * shop's own on/off switch per product. Form posts are checked for permission and CSRF token.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }

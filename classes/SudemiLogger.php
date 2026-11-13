@@ -1,18 +1,20 @@
 <?php
+
 /**
  * A short, bounded log a shop owner can read, which never contains key material.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiLogger
 {
-    const CONF = 'SUDEMI_LOG';
-    const LIMIT = 50;
+    public const CONF = 'SUDEMI_LOG';
+    public const LIMIT = 50;
 
     public static function info($message)
     {

@@ -3,6 +3,8 @@
  * only through a support ticket (owner 2026-11-09); the rest is saved on sudemi from here.
  * Everything printed is escaped; the form carries the module's CSRF token.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-profile">

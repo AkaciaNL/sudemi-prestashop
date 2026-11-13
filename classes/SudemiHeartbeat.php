@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Telling sudemi this shop is still here, and still means its prices.
  *
@@ -18,22 +19,23 @@
  * arriving. Stating what this catalogue is lets sudemi disagree, and a disagreement costs one
  * full sync instead of weeks of a wrong price.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiHeartbeat
 {
-    const CONF_STATUS = 'SUDEMI_STATUS';
-    const CONF_INTERVAL = 'SUDEMI_HEARTBEAT_SECONDS';
-    const CONF_CHANGES = 'SUDEMI_CHANGE_COUNTER';
-    const CONF_CRON_TOKEN = 'SUDEMI_CRON_TOKEN';
+    public const CONF_STATUS = 'SUDEMI_STATUS';
+    public const CONF_INTERVAL = 'SUDEMI_HEARTBEAT_SECONDS';
+    public const CONF_CHANGES = 'SUDEMI_CHANGE_COUNTER';
+    public const CONF_CRON_TOKEN = 'SUDEMI_CRON_TOKEN';
 
     /** What this shop asks for. sudemi may hold it to something slower, and says so if it does. */
-    const DEFAULT_INTERVAL = 300;
+    public const DEFAULT_INTERVAL = 300;
 
     /**
      * Runs a beat, draining anything that is waiting first.

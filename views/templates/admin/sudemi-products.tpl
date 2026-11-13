@@ -3,6 +3,8 @@
  * (GET /integration/v1/listings), why one is not shown, and the shop's own on/off switch.
  * Everything printed is escaped; the switch forms carry the module's CSRF token.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-products">

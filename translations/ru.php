@@ -1,7 +1,18 @@
 <?php
 
+/**
+ * sudemi Connector for PrestaShop.
+ *
+ * @author    Akacia
+ * @copyright Akacia
+ * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
+ */
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
 global $_MODULE;
-$_MODULE = array();
+$_MODULE = [];
 $_MODULE['<{sudemi}prestashop>sudemi_d80cf3c6c3223161df426910c9de3567'] = 'Коннектор sudemi';
 $_MODULE['<{sudemi}prestashop>sudemi_3ee935f006929a22571df7926d7ce7ea'] = 'Размещайте свой каталог на sudemi, чтобы ИИ-ассистент мог находить ваши товары и направлять к вам покупателей.';
 $_MODULE['<{sudemi}prestashop>sudemi_3ef719be3fcfc231dedf3a4214d49fef'] = 'Ключ подписи будет удалён, а магазин отключён от sudemi. Продолжить?';

@@ -3,6 +3,8 @@
  * plain text from sudemi: escaped, never HTML. The forms post to the module page, which checks
  * the employee's permission and the CSRF token before anything is sent.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="card mt-2 panel" id="sudemi-order-request">

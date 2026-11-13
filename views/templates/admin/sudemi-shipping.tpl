@@ -2,6 +2,8 @@
  * Shipping > sudemi shipping: the shop's shipping settings on sudemi and what buyers pay now.
  * Everything printed is escaped; the form carries the module's CSRF token.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-shipping">

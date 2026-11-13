@@ -2,6 +2,8 @@
  * sudemi > Dashboard (1.4.0): statistics from sudemi (GET /integration/v1/stats). The charts are
  * SVG built by SudemiInsights::chart, which escapes every label itself; printed with nofilter.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-dashboard">

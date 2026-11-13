@@ -1,8 +1,13 @@
 <?php
+
 /**
  * 1.2.2: products can be marked as excluded from the right of withdrawal (Directive 2011/83/EU,
  * art. 16). Existing installs get the table and the product-page hooks here (install() only runs
  * on a fresh install).
+ *
+ * @author    Akacia
+ * @copyright Akacia
+ * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
 if (!defined('_PS_VERSION_')) {
     exit;

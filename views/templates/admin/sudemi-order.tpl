@@ -3,6 +3,8 @@
  * allows now (allowed_actions). Everything printed is escaped; the forms carry the module's CSRF
  * token, and refund and cancel an idempotency key so a repeated post moves no money twice.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-order">

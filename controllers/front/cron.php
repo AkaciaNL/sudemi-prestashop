@@ -1,4 +1,5 @@
 <?php
+
 /**
  * The entry point this shop's own cron calls, every five minutes.
  *
@@ -12,9 +13,10 @@
  * that is free to hammer is a denial of service with extra steps. The token is compared with
  * hash_equals, and the answer is deliberately the same shape whether or not it matched.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }

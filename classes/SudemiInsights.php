@@ -1,4 +1,5 @@
 <?php
+
 /**
  * What sudemi holds about this shop (protocol 4e, 1.4.0): statistics, the shop's products as
  * sudemi lists them, and the shop profile buyers see. Calls are signed and see only this shop.
@@ -6,9 +7,10 @@
  * The chart is drawn here as inline SVG (no outside scripts in the back office). Everything
  * that is not a call is pure, so tests/insights-test.php runs it without PrestaShop.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
@@ -16,29 +18,29 @@ if (!defined('_PS_VERSION_')) {
 class SudemiInsights
 {
     /** The periods offered on the Dashboard, in days. */
-    const PERIODS = [7, 30, 90];
+    public const PERIODS = [7, 30, 90];
 
     /** The reasons a listing is not shown (protocol 4e); anything else is shown as "not listed". */
-    const REASONS = ['disabled_by_shop', 'not_in_shop', 'out_of_stock', 'no_shipping', 'suspended', 'payouts_not_ready', 'shop_not_reporting'];
+    public const REASONS = ['disabled_by_shop', 'not_in_shop', 'out_of_stock', 'no_shipping', 'suspended', 'payouts_not_ready', 'shop_not_reporting'];
 
-    const PAGE_SIZE = 50;
+    public const PAGE_SIZE = 50;
 
     // Profile values kept by the module, sent with every catalogue sync instead of the shop's
     // own name and e-mail (before 1.4.0 each sync overwrote what the seller had set on sudemi).
-    const CONF_DESCRIPTION = 'SUDEMI_PROFILE_DESCRIPTION';
-    const CONF_SUPPORT_EMAIL = 'SUDEMI_PROFILE_SUPPORT_EMAIL';
-    const CONF_RETURNS_DAYS = 'SUDEMI_PROFILE_RETURNS_DAYS';
+    public const CONF_DESCRIPTION = 'SUDEMI_PROFILE_DESCRIPTION';
+    public const CONF_SUPPORT_EMAIL = 'SUDEMI_PROFILE_SUPPORT_EMAIL';
+    public const CONF_RETURNS_DAYS = 'SUDEMI_PROFILE_RETURNS_DAYS';
 
     // Checkout mode (1.4.1, docs/seller-modes.md): which checkout this shop's offers use, shown on
     // every sudemi page. Kept for CHECKOUT_TTL seconds (a failed read too, as "none"), so the
     // banner costs at most one call a minute against the shop's 120 calls a minute.
-    const CONF_CHECKOUT = 'SUDEMI_CHECKOUT_MODE';
-    const CHECKOUT_TTL = 60;
-    const CHECKOUT_MODES = ['SUDEMI', 'SHOP', 'SUSPENDED'];
-    const CHECKOUT_REASONS = ['stripe_not_connected', 'stripe_requirements_due', 'stripe_restricted'];
+    public const CONF_CHECKOUT = 'SUDEMI_CHECKOUT_MODE';
+    public const CHECKOUT_TTL = 60;
+    public const CHECKOUT_MODES = ['SUDEMI', 'SHOP', 'SUSPENDED'];
+    public const CHECKOUT_REASONS = ['stripe_not_connected', 'stripe_requirements_due', 'stripe_restricted'];
 
     /** GET /shop of this request, shared by the page header and the Shop profile page. */
-    private static $shopRead = null;
+    private static $shopRead;
 
     // ----------------------------------------------------------------- calls ----
 
@@ -109,7 +111,7 @@ class SudemiInsights
             $read = self::shop();
 
             return $read['ok'] ? self::checkoutModel($read['shop']) : null;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return null;
         }
     }
@@ -118,7 +120,7 @@ class SudemiInsights
     {
         try {
             Configuration::updateValue(self::CONF_CHECKOUT, self::checkoutEntry($model, time()));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Only a cache: the next page asks sudemi again.
         }
     }

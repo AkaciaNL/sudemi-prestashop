@@ -1,10 +1,12 @@
 <?php
+
 /**
  * The sudemi entry of the left sidebar (1.4.0). Opening it shows the Dashboard.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }

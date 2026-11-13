@@ -1,7 +1,18 @@
 <?php
 
+/**
+ * sudemi Connector for PrestaShop.
+ *
+ * @author    Akacia
+ * @copyright Akacia
+ * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
+ */
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
 global $_MODULE;
-$_MODULE = array();
+$_MODULE = [];
 $_MODULE['<{sudemi}prestashop>sudemi_d80cf3c6c3223161df426910c9de3567'] = 'sudemi 连接器';
 $_MODULE['<{sudemi}prestashop>sudemi_3ee935f006929a22571df7926d7ce7ea'] = '将你的商品目录发布到 sudemi，让 AI 助手能找到你的商品并为你带来买家。';
 $_MODULE['<{sudemi}prestashop>sudemi_3ef719be3fcfc231dedf3a4214d49fef'] = '此操作将删除签名密钥，并断开店铺与 sudemi 的连接。是否继续？';

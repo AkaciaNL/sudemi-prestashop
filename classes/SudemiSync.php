@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Turning this shop's catalogue into what sudemi stores.
  *
@@ -8,9 +9,10 @@
  * loads continue it (see work()). A change push carries one product's listings and runs from
  * PrestaShop's own update hooks.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
@@ -30,13 +32,13 @@ class SudemiSync
         return trim(str_replace("\u{00A0}", ' ', $text));
     }
 
-    const BATCH_SIZE = 100;
+    public const BATCH_SIZE = 100;
 
     /** Set when a full sync should run (sudemi asked, carriers or delivery times changed). */
-    const CONF_DUE = 'SUDEMI_RESYNC_DUE';
+    public const CONF_DUE = 'SUDEMI_RESYNC_DUE';
 
     /** The full sync in progress: its id, where it stopped, the revision it started from. */
-    const CONF_STATE = 'SUDEMI_SYNC_STATE';
+    public const CONF_STATE = 'SUDEMI_SYNC_STATE';
 
     /**
      * Listings that stopped being listed here (a product deleted or switched off, a combination
@@ -44,15 +46,15 @@ class SudemiSync
      * commit can take a listing off sudemi, so while the two differ no push may carry the
      * catalogue revision: sudemi would adopt it and the gone listing would stay listed.
      */
-    const CONF_REMOVALS = 'SUDEMI_REMOVALS';
-    const CONF_REMOVALS_SYNCED = 'SUDEMI_REMOVALS_SYNCED';
+    public const CONF_REMOVALS = 'SUDEMI_REMOVALS';
+    public const CONF_REMOVALS_SYNCED = 'SUDEMI_REMOVALS_SYNCED';
 
     /** A back-office request sends at most this many products, for at most this many seconds. */
-    const STEP_PRODUCTS = 25;
-    const STEP_SECONDS = 2;
+    public const STEP_PRODUCTS = 25;
+    public const STEP_SECONDS = 2;
 
     /** sudemi drops an uncommitted sync after 6 hours; one older than this is started again. */
-    const MAX_SYNC_AGE = 19800;
+    public const MAX_SYNC_AGE = 19800;
 
     /** Asks for a full sync; the cron entry (or the next back-office steps) runs it. */
     public static function request()
@@ -168,7 +170,7 @@ class SudemiSync
                 SudemiHeartbeat::run();
             }
             self::work(self::STEP_PRODUCTS, self::STEP_SECONDS);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             SudemiLogger::warn('Background step failed: ' . $e->getMessage());
         }
     }
@@ -379,7 +381,7 @@ class SudemiSync
     }
 
     /** The most listings one /products request may carry. */
-    const MAX_LISTINGS_PER_REQUEST = 500;
+    public const MAX_LISTINGS_PER_REQUEST = 500;
 
     /** The batch size: 500, or less when sudemi's /sync answer names a smaller maximum. */
     public static function listingsPerRequest($syncAnswer)
@@ -452,7 +454,7 @@ class SudemiSync
         foreach ($ids as $id) {
             try {
                 self::pushProduct($id);
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 SudemiLogger::warn('A product change could not be sent: ' . $e->getMessage());
             }
         }
@@ -477,7 +479,7 @@ class SudemiSync
         try {
             $listings = self::listings((int) $product->id, $languageId);
             $priced = true;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // PrestaShop prices a full product only with an employee or a cart in the
             // context; outside one (a script, an import) the save still sends price and stock.
             $listings = [];
@@ -506,7 +508,7 @@ class SudemiSync
                     'quantity' => $quantity,
                 ];
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Not even a price without an employee or a cart in the context (a script, an
             // import). The change counter moved, so the next heartbeat disagrees and sudemi asks
             // for a full sync, which the cron entry runs with a shop context.
@@ -591,7 +593,7 @@ class SudemiSync
     }
 
     /** A hash of the category tree last sent to sudemi, so a change can be noticed. */
-    const CONF_CATEGORIES = 'SUDEMI_CATEGORIES_SENT';
+    public const CONF_CATEGORIES = 'SUDEMI_CATEGORIES_SENT';
 
     /** Whether sudemi holds this shop's category tree as it is now; sends it when not. */
     private static function categoriesCurrent()
@@ -782,6 +784,7 @@ class SudemiSync
                 'description' => isset($category['description']) ? self::plain($category['description']) : '',
             ];
         }
+
         return $payload;
     }
 

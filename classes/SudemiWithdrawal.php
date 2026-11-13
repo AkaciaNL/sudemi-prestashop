@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Products excluded from the buyer's right of withdrawal (Directive 2011/83/EU, art. 16).
  *
@@ -11,21 +12,22 @@
  * applies). A combination has no setting of its own: it is the same product in another size or
  * colour, so it carries the product's.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiWithdrawal
 {
-    const FIELD = 'sudemi_withdrawal_exclusion';
+    public const FIELD = 'sudemi_withdrawal_exclusion';
     /** The "none" choice in the product form; never stored and never sent. */
-    const NONE = 'none';
+    public const NONE = 'none';
 
     /** The art. 16 exceptions sudemi accepts, as sent in the product payload. */
-    const REASONS = ['hygiene', 'custom', 'perishable', 'media', 'press', 'mixed', 'alcohol'];
+    public const REASONS = ['hygiene', 'custom', 'perishable', 'media', 'press', 'mixed', 'alcohol'];
 
     /**
      * One of REASONS, or null for "normal right of withdrawal". Anything else is null: an unknown

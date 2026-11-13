@@ -2,6 +2,8 @@
  * The configuration screen. Everything printed here is escaped by Smarty's `escape` modifier;
  * nothing is echoed raw, because a module screen is a privileged page.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <div class="sudemi-ui" id="sudemi-settings">

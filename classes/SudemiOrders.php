@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Answering sudemi's question: can this shop actually fulfil the order?
  *
@@ -10,13 +11,21 @@
  * Until this module answers, nothing has been charged. Yes captures the money and splits it; no
  * releases the hold; saying nothing releases it too once the window closes. Silence is never
  * taken as agreement - a shop that has stopped answering is usually a shop that is gone.
+ *
+ * @author    Akacia
+ * @copyright Akacia
+ * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
 class SudemiOrders
 {
     /** Set on the PrestaShop order so one sudemi order can never produce two local ones. */
-    const REFERENCE_PREFIX = 'SUDEMI';
+    public const REFERENCE_PREFIX = 'SUDEMI';
 
-    const CONF_AUTO_CONFIRM = 'SUDEMI_AUTO_CONFIRM';
+    public const CONF_AUTO_CONFIRM = 'SUDEMI_AUTO_CONFIRM';
 
     /**
      * Works through what arrived on the heartbeat.
@@ -37,6 +46,7 @@ class SudemiOrders
                 . 'must be answered by hand before their window closes.',
                 count($pending)
             ));
+
             return;
         }
 
@@ -139,7 +149,7 @@ class SudemiOrders
      * sudemi itself.
      *
      * @return array{state:string,order:Order|null} state: created, existing, busy (another caller
-     *               is building it right now) or failed (it could not be built)
+     *                                              is building it right now) or failed (it could not be built)
      */
     public static function obtainLocalOrder(array $pending, $sudemiId)
     {
@@ -161,7 +171,7 @@ class SudemiOrders
         }
         try {
             $order = self::createLocalOrder($pending, $sudemiId);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Failed here and now (not a process that died): the claim goes at once, so the next
             // heartbeat can try again instead of waiting out the stale time.
             SudemiClaims::release($sudemiId);
@@ -265,9 +275,9 @@ class SudemiOrders
      * Sends the acceptance and applies a definitive answer.
      *
      * @param string $sudemiId
-     * @param Order  $order
-     * @param bool   $quiet    true on the heartbeat's reconcile pass: no log line for an order
-     *                         that is simply still waiting
+     * @param Order $order
+     * @param bool $quiet true on the heartbeat's reconcile pass: no log line for an order
+     *                    that is simply still waiting
      *
      * @return string the outcome
      */
@@ -302,9 +312,9 @@ class SudemiOrders
      * Brings the local order in line with a definitive outcome; a retry changes nothing.
      *
      * @param string $sudemiId
-     * @param Order  $order
-     * @param string $outcome  paid|waiting|declined|cancelled|retry
-     * @param bool   $quiet
+     * @param Order $order
+     * @param string $outcome paid|waiting|declined|cancelled|retry
+     * @param bool $quiet
      */
     private static function applyOutcome($sudemiId, $order, $outcome, $quiet)
     {
@@ -369,7 +379,7 @@ class SudemiOrders
     }
 
     /** How many unpaid local orders one heartbeat re-checks. */
-    const RECONCILE_LIMIT = 25;
+    public const RECONCILE_LIMIT = 25;
 
     /**
      * Re-asks sudemi about local orders still waiting for payment here.
@@ -430,10 +440,10 @@ class SudemiOrders
      * (a /cancel is refused before payment), so the buyer's hold is released and nothing is
      * charged. If it turns out the order was paid meanwhile, it is cancelled with a full refund.
      *
-     * @param Order  $order
+     * @param Order $order
      * @param string $sudemiId
      * @param string $reason
-     * @param bool   $queueOnRetry put it in the order-call retry list when sudemi does not answer
+     * @param bool $queueOnRetry put it in the order-call retry list when sudemi does not answer
      */
     public static function rejectFromShop($order, $sudemiId, $reason, $queueOnRetry = true)
     {
@@ -472,10 +482,10 @@ class SudemiOrders
 
     // ------------------------------------------------------------- order-call retry list ----
 
-    const CONF_CALLS = 'SUDEMI_ORDER_CALLS';
-    const CALLS_MAX = 500;
-    const CALLS_PER_BEAT = 25;
-    const CALLS_MAX_AGE = 1209600; // 14 days
+    public const CONF_CALLS = 'SUDEMI_ORDER_CALLS';
+    public const CALLS_MAX = 500;
+    public const CALLS_PER_BEAT = 25;
+    public const CALLS_MAX_AGE = 1209600; // 14 days
 
     /**
      * What a shipped/delivered (or other order) call answer means: 'done' (200), 'retry'
@@ -600,7 +610,7 @@ class SudemiOrders
     // ------------------------------------------------------------ tracking after shipping ----
 
     /** sudemi statuses after which the tracking number can no longer change. */
-    const TRACKING_FINAL = ['DELIVERED', 'CANCELLED', 'REFUNDED', 'DECLINED'];
+    public const TRACKING_FINAL = ['DELIVERED', 'CANCELLED', 'REFUNDED', 'DECLINED'];
 
     /** Set while a tracking number sudemi sent is written here, so it is never sent back. */
     public static $applyingTracking = false;
@@ -789,7 +799,7 @@ class SudemiOrders
      * a retry queued, or a refusal logged.
      *
      * @param Order|null $order
-     * @param bool       $fromQueue whether the send came from the retry list (it is then removed or kept there)
+     * @param bool $fromQueue whether the send came from the retry list (it is then removed or kept there)
      */
     public static function trackingResult($order, $sudemiId, array $body, array $result, $fromQueue)
     {
@@ -840,7 +850,7 @@ class SudemiOrders
      * slips and carrier modules find it where they expect to. Without this a merchant has a paid
      * order and nowhere to send it.
      *
-     * @param Order  $order
+     * @param Order $order
      * @param string $sudemiId
      */
     private static function fillCustomer($order, $sudemiId)
@@ -921,7 +931,7 @@ class SudemiOrders
      * Written straight to the column: the Order object in hand may hold a state that was just
      * changed underneath it, and saving the whole object would put the old state back.
      *
-     * @param Order  $order
+     * @param Order $order
      * @param string $message
      */
     public static function privateMessage($order, $message)
@@ -949,6 +959,7 @@ class SudemiOrders
      * pushed: what was true at the last sync is precisely what cannot be relied on here.
      *
      * @param array $pending
+     *
      * @return string|null
      */
     private static function firstShortfall(array $pending)
@@ -980,6 +991,7 @@ class SudemiOrders
                 return sprintf('"%s" is out of stock', $name);
             }
         }
+
         return null;
     }
 
@@ -988,6 +1000,7 @@ class SudemiOrders
      * currency_code (the order is then booked as before).
      *
      * @param array $pending
+     *
      * @return string|null
      */
     private static function currencyProblem(array $pending)
@@ -1018,8 +1031,9 @@ class SudemiOrders
      * A real order rather than a note of our own: it appears where the merchant already looks,
      * stock comes down, and picking and shipping work exactly as for any other sale.
      *
-     * @param array  $pending
+     * @param array $pending
      * @param string $sudemiId
+     *
      * @return Order|null
      */
     private static function createLocalOrder(array $pending, $sudemiId)
@@ -1078,6 +1092,7 @@ class SudemiOrders
             $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
             if (!$cart->updateQty($quantity, $productId, $attributeId ?: null)) {
                 $cart->delete();
+
                 return null;
             }
             if ($paid !== null) {
@@ -1101,6 +1116,7 @@ class SudemiOrders
                 $qty = max(1, (int) $row['cart_quantity']);
                 if (!isset($paidByProduct[$key])) {
                     $cart->delete();
+
                     return null;
                 }
                 $gross = $paidByProduct[$key];
@@ -1164,13 +1180,14 @@ class SudemiOrders
         // records it (1 when the order is in the default currency, which is the normal case).
         $order->conversion_rate = Validate::isLoadedObject($currency) && (float) $currency->conversion_rate > 0
             ? (float) $currency->conversion_rate : 1.0;
-        $order->valid = 0;
+        $order->valid = false;
         // The shop's rounding, as PrestaShop's own checkout records it on the order: left at 0
         // the invoice reads it as "round up" and its VAT rows no longer match the order lines.
         $order->round_mode = (int) Configuration::get('PS_PRICE_ROUND_MODE');
         $order->round_type = (int) Configuration::get('PS_ROUND_TYPE');
         if (!$order->add()) {
             $cart->delete();
+
             return null;
         }
 
@@ -1211,6 +1228,7 @@ class SudemiOrders
      * is not money; the order is then priced from the catalogue, as before.
      *
      * @param array $pending One entry of the pending_orders block
+     *
      * @return array|null
      */
     public static function paidAmounts(array $pending)
@@ -1263,8 +1281,8 @@ class SudemiOrders
         $customer->firstname = 'sudemi';
         $customer->lastname = 'buyer';
         $customer->email = 'orders@sudemi.com';
-        $customer->is_guest = 1;
-        $customer->active = 1;
+        $customer->is_guest = true;
+        $customer->active = true;
         $customer->passwd = Tools::hash(Tools::passwdGen(32));
         $customer->id_default_group = (int) Configuration::get('PS_GUEST_GROUP');
         if (!$customer->add()) {
@@ -1307,7 +1325,7 @@ class SudemiOrders
     }
 
     /** The note on an order the buyer cancelled on sudemi after it was paid. */
-    const BUYER_CANCEL_NOTE = 'Cancelled by the buyer on sudemi before shipping; the buyer has been refunded in full.';
+    public const BUYER_CANCEL_NOTE = 'Cancelled by the buyer on sudemi before shipping; the buyer has been refunded in full.';
 
     /**
      * The SudemiText key of the note on an order cancelled on sudemi, by who cancelled it
@@ -1375,10 +1393,10 @@ class SudemiOrders
      * to any order not cancelled or refunded here yet and not shipped: a paid order left
      * "Payment accepted" here would get packed and sent to a buyer who has their money back.
      *
-     * @param string $status       the order's status on sudemi
-     * @param int    $current      the local order's current state id
-     * @param bool   $shipped      whether the local order has been shipped or delivered
-     * @param array  $states       ['preparation'=>id, 'canceled'=>id, 'refund'=>id, 'error'=>id]
+     * @param string $status the order's status on sudemi
+     * @param int $current the local order's current state id
+     * @param bool $shipped whether the local order has been shipped or delivered
+     * @param array $states ['preparation'=>id, 'canceled'=>id, 'refund'=>id, 'error'=>id]
      *
      * @return string|null
      */
@@ -1464,6 +1482,7 @@ class SudemiOrders
                 $reason
             ) . ($key !== 'note_decline' ? ' ' . SudemiText::EN[$key] : ''));
             self::declineMessage($order, $by);
+
             return;
         }
 
@@ -1578,6 +1597,7 @@ class SudemiOrders
      * The local order already built for a sudemi order, if there is one.
      *
      * @param string $sudemiId
+     *
      * @return Order|null
      */
     private static function findLocalOrder($sudemiId)
@@ -1601,7 +1621,7 @@ class SudemiOrders
      * order, so no extra storage is needed and an order that was not placed through sudemi is
      * simply skipped by the caller.
      *
-     * @param Order  $order
+     * @param Order $order
      * @param string $event 'shipped' or 'delivered'
      */
     public static function report($order, $event)
@@ -1686,9 +1706,9 @@ class SudemiOrders
      * step (a same-version package replaced, an upgrade step that stopped halfway): PrestaShop
      * then runs no upgrade script, and a missing column would break order pages and the feed.
      */
-    const SCHEMA = 3; // 3: the order claim table (review 2026-11-12)
-    const CONF_SCHEMA = 'SUDEMI_SCHEMA';
-    const CONF_SCHEMA_TRIED = 'SUDEMI_SCHEMA_TRIED';
+    public const SCHEMA = 3; // 3: the order claim table (review 2026-11-12)
+    public const CONF_SCHEMA = 'SUDEMI_SCHEMA';
+    public const CONF_SCHEMA_TRIED = 'SUDEMI_SCHEMA_TRIED';
 
     /**
      * Brings the tables up to SCHEMA when they are behind: every step is idempotent (CREATE IF
@@ -1708,7 +1728,7 @@ class SudemiOrders
         try {
             $ok = self::installTable() && self::addCurrencyColumn() && self::addChangeColumns()
                 && SudemiWithdrawal::installTable() && SudemiClaims::installTable();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $ok = false;
         }
         if ($ok) {
@@ -1968,6 +1988,7 @@ class SudemiOrders
     public static function autoConfirmEnabled()
     {
         $value = Configuration::get(self::CONF_AUTO_CONFIRM);
+
         return $value === false || $value === null || (string) $value !== '0';
     }
 

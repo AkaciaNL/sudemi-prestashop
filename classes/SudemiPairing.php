@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Connecting this shop to a sudemi seller account.
  *
@@ -7,35 +8,36 @@
  * a person has claimed the shop in a browser. Signing in happens on sudemi: this module never
  * asks for a sudemi password and could not use one.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiPairing
 {
-    const CONF_CHALLENGE = 'SUDEMI_CHALLENGE_TOKEN';
-    const CONF_CODE = 'SUDEMI_PAIRING_CODE';
-    const CONF_POLL = 'SUDEMI_PAIRING_POLL';
-    const CONF_CLAIM_URL = 'SUDEMI_CLAIM_URL';
+    public const CONF_CHALLENGE = 'SUDEMI_CHALLENGE_TOKEN';
+    public const CONF_CODE = 'SUDEMI_PAIRING_CODE';
+    public const CONF_POLL = 'SUDEMI_PAIRING_POLL';
+    public const CONF_CLAIM_URL = 'SUDEMI_CLAIM_URL';
     /** When this pairing was started (unix time), so the background poll knows its lifetime. */
-    const CONF_STARTED = 'SUDEMI_PAIRING_STARTED';
+    public const CONF_STARTED = 'SUDEMI_PAIRING_STARTED';
     /** Not before this time (unix) does the background poll ask again. */
-    const CONF_NEXT_POLL = 'SUDEMI_PAIRING_NEXT_POLL';
+    public const CONF_NEXT_POLL = 'SUDEMI_PAIRING_NEXT_POLL';
 
     /** sudemi keeps a pairing open for 24 hours; after that there is nothing left to collect. */
-    const LIFETIME = 86400;
+    public const LIFETIME = 86400;
 
     /**
      * The background poll asks at most once a minute for the first half hour (the shop owner is
      * usually confirming right now, in another tab), then every twenty minutes. That keeps a
      * whole 24-hour pairing within the 100 polls sudemi allows per pairing (PROTOCOL.md).
      */
-    const POLL_EVERY = 60;
-    const POLL_FAST_FOR = 1800;
-    const POLL_SLOW_EVERY = 1200;
+    public const POLL_EVERY = 60;
+    public const POLL_FAST_FOR = 1800;
+    public const POLL_SLOW_EVERY = 1200;
 
     /** @return array{ok:bool,message:string} */
     public static function start()
@@ -202,7 +204,7 @@ class SudemiPairing
         ignore_user_abort(true);
         try {
             self::pollInBackground();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             SudemiLogger::warn('Background step failed: ' . $e->getMessage());
         }
     }

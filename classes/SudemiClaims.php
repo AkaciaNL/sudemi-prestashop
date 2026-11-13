@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Who builds the PrestaShop order for a sudemi order: exactly one caller, decided by the database
  * before anything is built.
@@ -13,21 +14,22 @@
  * A caller that dies after claiming leaves a row with no order behind it. Such a row is taken over
  * after STALE_SECONDS by a conditional update, which again lets exactly one caller in.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiClaims
 {
-    const STALE_SECONDS = 600;
+    public const STALE_SECONDS = 600;
 
     /** The claim was won: this caller builds the order. */
-    const WON = 'won';
+    public const WON = 'won';
     /** Another caller claimed it moments ago and is building it now. */
-    const BUSY = 'busy';
+    public const BUSY = 'busy';
 
     private static function table()
     {
@@ -55,6 +57,7 @@ class SudemiClaims
      * Claims the right to build the order for a sudemi order.
      *
      * @param string $sudemiId
+     *
      * @return string|int self::WON, self::BUSY, or the id of the PrestaShop order already built
      */
     public static function claim($sudemiId)

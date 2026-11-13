@@ -1,13 +1,15 @@
 <?php
+
 /**
  * The shop's currency as sudemi sees it, and money in a currency's own minor units.
  *
  * A shop sells in one currency (protocol section 4c): the buyer's card is charged in it and the
  * orders sudemi sends carry it. Pure, so it can be tested without PrestaShop.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
@@ -15,16 +17,16 @@ if (!defined('_PS_VERSION_')) {
 class SudemiCurrency
 {
     /** The currency sudemi answered on POST /shop (its echo of what this shop declared). */
-    const CONF_SHOP_CURRENCY = 'SUDEMI_SHOP_CURRENCY';
+    public const CONF_SHOP_CURRENCY = 'SUDEMI_SHOP_CURRENCY';
 
     /** Shop currencies sudemi takes: EUR and every ECB currency except ISK (owner 2026-11-09, protocol 4c). */
-    const SUPPORTED = ['EUR', 'AUD', 'BRL', 'CAD', 'CHF', 'CNY', 'CZK', 'DKK', 'GBP', 'HKD', 'HUF', 'IDR', 'ILS', 'INR', 'JPY', 'KRW', 'MXN', 'MYR', 'NOK', 'NZD', 'PHP', 'PLN', 'RON', 'SEK', 'SGD', 'THB', 'TRY', 'USD', 'ZAR'];
+    public const SUPPORTED = ['EUR', 'AUD', 'BRL', 'CAD', 'CHF', 'CNY', 'CZK', 'DKK', 'GBP', 'HKD', 'HUF', 'IDR', 'ILS', 'INR', 'JPY', 'KRW', 'MXN', 'MYR', 'NOK', 'NZD', 'PHP', 'PLN', 'RON', 'SEK', 'SGD', 'THB', 'TRY', 'USD', 'ZAR'];
 
     /** ISO 4217 currencies with no minor unit. */
-    const ZERO_DECIMALS = ['BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
+    public const ZERO_DECIMALS = ['BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
 
     /** ISO 4217 currencies with three decimals. */
-    const THREE_DECIMALS = ['BHD', 'JOD', 'KWD', 'OMR', 'TND'];
+    public const THREE_DECIMALS = ['BHD', 'JOD', 'KWD', 'OMR', 'TND'];
 
     /** Upper-case three-letter code, or '' for anything that is not one. */
     public static function normalise($code)
@@ -84,9 +86,9 @@ class SudemiCurrency
      * Old cores send no currency_code: null, and the order is booked as before. The reasons go
      * to sudemi as the decline reason, so they are plain words.
      *
-     * @param string $orderCode    the order's currency_code
-     * @param string $shopCode     the currency this shop sells in (its default currency)
-     * @param bool   $activeInShop whether PrestaShop has that currency installed and switched on
+     * @param string $orderCode the order's currency_code
+     * @param string $shopCode the currency this shop sells in (its default currency)
+     * @param bool $activeInShop whether PrestaShop has that currency installed and switched on
      */
     public static function orderProblem($orderCode, $shopCode, $activeInShop)
     {
@@ -115,11 +117,12 @@ class SudemiCurrency
      * the one sudemi booked the order in, the amount would mean something else on sudemi's side,
      * so nothing is sent.
      *
-     * @param int|null    $amountMinor    null = refund the rest
-     * @param string      $reason
-     * @param string      $refundCode     the currency of the shop's refund (the local order's)
-     * @param string|null $bookedCode     the currency sudemi booked the order in; null when not
-     *                                    known (an order from before 1.2.12)
+     * @param int|null $amountMinor null = refund the rest
+     * @param string $reason
+     * @param string $refundCode the currency of the shop's refund (the local order's)
+     * @param string|null $bookedCode the currency sudemi booked the order in; null when not
+     *                                known (an order from before 1.2.12)
+     *
      * @return array ['body' => array] or ['error' => string]
      */
     public static function refundBody($amountMinor, $reason, $refundCode, $bookedCode)

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * The shop's orders, shipping and payouts as sudemi holds them (protocol 4d).
  *
@@ -6,23 +7,24 @@
  * and only sudemi's answer is reflected in the PrestaShop order (SudemiChanges::apply). Nothing
  * here decides on its own what an order's state is.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiManage
 {
-    const STATUSES = ['AWAITING_SELLER', 'ACCEPTED', 'PAID', 'DECLINED', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
-    const SORTS = ['placed', 'total', 'status'];
-    const LANGUAGES = ['en', 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he'];
-    const BULK_ACTIONS = ['accept', 'reject', 'shipped', 'delivered'];
-    const ORDER_ACTIONS = ['accept', 'reject', 'shipped', 'update_tracking', 'delivered', 'refund', 'cancel', 'request_accept', 'request_reject'];
-    const PAGE_SIZE = 25;
-    const BULK_MAX = 100;
-    const MAX_TEXT = 500;
+    public const STATUSES = ['AWAITING_SELLER', 'ACCEPTED', 'PAID', 'DECLINED', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
+    public const SORTS = ['placed', 'total', 'status'];
+    public const LANGUAGES = ['en', 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he'];
+    public const BULK_ACTIONS = ['accept', 'reject', 'shipped', 'delivered'];
+    public const ORDER_ACTIONS = ['accept', 'reject', 'shipped', 'update_tracking', 'delivered', 'refund', 'cancel', 'request_accept', 'request_reject'];
+    public const PAGE_SIZE = 25;
+    public const BULK_MAX = 100;
+    public const MAX_TEXT = 500;
 
     /**
      * The table filters, cleaned: only known values pass, so nothing a visitor types reaches the
@@ -213,6 +215,7 @@ class SudemiManage
                 // POST /orders/{id}/tracking (protocol 4d): a blank carrier keeps sudemi's.
                 $path = 'tracking';
                 // fall through
+                // no break
             case 'shipped':
                 $body['carrier'] = self::text(isset($params['carrier']) ? $params['carrier'] : '', 100);
                 $body['trackingCode'] = self::text(isset($params['trackingCode']) ? $params['trackingCode'] : '', 100);

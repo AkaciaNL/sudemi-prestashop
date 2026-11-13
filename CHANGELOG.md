@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.2
+
+- **Ready for PrestaShop Addons.** A module logo (`logo.png`, 32x32, the sudemi mark), the licence
+  header with author, copyright and licence in every file, the `_PS_VERSION_` guard in every PHP
+  file (also the translation files), and the code formatted to the PrestaShop coding standard
+  (php-cs-fixer with the prestashop/php-dev-tools rules).
+- Small type fixes found by PHPStan (level 5, against PrestaShop 9.2): yes/no fields are set as
+  true/false instead of 1/0, and a few code comments describe the values more exactly. Nothing
+  changes in how the module works with sudemi, your orders, the statistics or the payment bar.
+
 ## 1.4.1
 
 - **Checkout mode on every sudemi page**, under the sudemi menu, as sudemi reports it for the

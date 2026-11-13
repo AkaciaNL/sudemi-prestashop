@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Support tickets with sudemi, from the module page.
  *
@@ -10,39 +11,40 @@
  * Validation here mirrors sudemi's own (which stays the authority) so a mistake is explained
  * before anything is sent. Every function that does not talk to sudemi is pure, for the tests.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class SudemiSupport
 {
-    const PATH = '/integration/v1/support/tickets';
+    public const PATH = '/integration/v1/support/tickets';
 
-    const CATEGORIES = ['ORDER', 'PAYMENT', 'REFUND_RETURN', 'ACCOUNT', 'SHOP_PLUGIN', 'PAYOUTS', 'OTHER'];
+    public const CATEGORIES = ['ORDER', 'PAYMENT', 'REFUND_RETURN', 'ACCOUNT', 'SHOP_PLUGIN', 'PAYOUTS', 'OTHER'];
 
-    const STATUSES = ['OPEN', 'WAITING_FOR_CUSTOMER', 'ANSWERED', 'CLOSED'];
+    public const STATUSES = ['OPEN', 'WAITING_FOR_CUSTOMER', 'ANSWERED', 'CLOSED'];
 
     /** The languages sudemi writes its support e-mails in. */
-    const LOCALES = ['en', 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he'];
+    public const LOCALES = ['en', 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he'];
 
-    const SUBJECT_MIN = 3;
-    const SUBJECT_MAX = 200;
-    const MESSAGE_MAX = 10000;
+    public const SUBJECT_MIN = 3;
+    public const SUBJECT_MAX = 200;
+    public const MESSAGE_MAX = 10000;
 
     /** Error kinds, which the module page turns into translated messages. */
-    const ERR_CATEGORY = 'category';
-    const ERR_SUBJECT = 'subject';
-    const ERR_MESSAGE = 'message';
-    const ERR_ORDER = 'order';
-    const ERR_INVALID = 'invalid';
-    const ERR_NOT_FOUND = 'not_found';
-    const ERR_TOO_MANY = 'too_many';
-    const ERR_UNREACHABLE = 'unreachable';
-    const ERR_FAILED = 'failed';
-    const ERR_SITE = 'site_mismatch';
+    public const ERR_CATEGORY = 'category';
+    public const ERR_SUBJECT = 'subject';
+    public const ERR_MESSAGE = 'message';
+    public const ERR_ORDER = 'order';
+    public const ERR_INVALID = 'invalid';
+    public const ERR_NOT_FOUND = 'not_found';
+    public const ERR_TOO_MANY = 'too_many';
+    public const ERR_UNREACHABLE = 'unreachable';
+    public const ERR_FAILED = 'failed';
+    public const ERR_SITE = 'site_mismatch';
 
     /** A ticket id as it goes into a path: a UUID and nothing else. */
     public static function isTicketId($id)

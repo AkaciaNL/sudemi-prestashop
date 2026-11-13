@@ -3,6 +3,8 @@
  * products, and the sudemi pages. Styles for all sudemi pages are here, scoped to .sudemi-ui.
  * Everything printed is escaped.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
 <style>

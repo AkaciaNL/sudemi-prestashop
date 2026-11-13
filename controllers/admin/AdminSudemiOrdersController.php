@@ -1,4 +1,5 @@
 <?php
+
 /**
  * sudemi > Orders: the shop's orders as sudemi holds them (list, one order, bulk actions,
  * CSV export). The page itself is SudemiAdminPages; this controller only routes.
@@ -6,9 +7,10 @@
  * PrestaShop checks the page token in the address before this runs (AdminController::init); every
  * form post is checked again for the employee's permission and the module's CSRF token.
  *
+ * @author    Akacia
+ * @copyright Akacia
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }

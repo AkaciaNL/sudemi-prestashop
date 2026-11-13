@@ -1,4 +1,5 @@
 <?php
+
 /**
  * What a product costs to ship to each country, read from this shop's own PrestaShop carriers,
  * plus the delivery times the merchant set for sudemi.
@@ -18,20 +19,28 @@
  *
  * Free shipping from a cart total (PS_SHIPPING_FREE_PRICE) depends on the cart, so it is not a
  * fixed price for one item and is ignored here.
+ *
+ * @author    Akacia
+ * @copyright Akacia
+ * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  */
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
 class SudemiShipping
 {
-    const CONF_HANDLING_DAYS = 'SUDEMI_HANDLING_DAYS';
-    const CONF_TRANSIT_DAYS = 'SUDEMI_TRANSIT_DAYS';
+    public const CONF_HANDLING_DAYS = 'SUDEMI_HANDLING_DAYS';
+    public const CONF_TRANSIT_DAYS = 'SUDEMI_TRANSIT_DAYS';
     /** JSON list of carrier reference ids that deliver sudemi orders; unset = every active carrier. */
-    const CONF_CARRIERS = 'SUDEMI_CARRIERS';
+    public const CONF_CARRIERS = 'SUDEMI_CARRIERS';
 
     /** Conservative until the merchant sets their own (shown and editable on the module page). */
-    const DEFAULT_HANDLING_DAYS = 2;
-    const DEFAULT_TRANSIT_DAYS = 5;
+    public const DEFAULT_HANDLING_DAYS = 2;
+    public const DEFAULT_TRANSIT_DAYS = 5;
 
     /** sudemi's buyer markets: EU, EEA, Switzerland, United Kingdom, Turkiye. */
-    const MARKETS = [
+    public const MARKETS = [
         'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV',
         'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE', 'NO', 'IS', 'LI', 'CH', 'GB', 'TR',
     ];
