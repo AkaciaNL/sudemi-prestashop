@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.4.0
+
+- **A sudemi menu of its own in the left sidebar** (Sell section): Dashboard, Products on sudemi,
+  Orders, Shipping costs, Payouts to you, Shop profile, Help and support, Settings. Every page has
+  the same header: the shop, whether sudemi shows its products, and the sudemi pages.
+- **Fixed: "The controller AdminSudemiOrders is missing or invalid"** (and AdminSudemiShipping).
+  On a shop whose 1.3.0 upgrade stopped at its first step (the order table repair), the Orders and
+  Shipping pages and the tracking hooks were never added, while the version was recorded. The
+  module now checks its menu and hooks once per version on a back-office page and adds what is
+  missing; upgrade-1.4.0.php does the same.
+- **Dashboard (statistics from sudemi):** sales, orders, average order, what is left after refunds
+  and commission, how often AI assistants showed the products, product views, cart additions and
+  the share of views that became orders, for the last 7, 30 or 90 days; two daily charts; top
+  products; orders by status; buyer countries; the latest orders.
+- **Products on sudemi:** every product as sudemi holds it, whether buyers see it and why not (out
+  of stock, no shipping price, payout account not active, ...), how often it was shown, viewed and
+  ordered in 30 days, and a switch to hide or show it on sudemi only. A catalogue sync does not
+  undo the switch.
+- **Shop profile:** the description, support e-mail and returns window buyers see, saved on sudemi.
+  The name is changed through a support ticket ("Ask to rename" opens one ready to send).
+  Fixed: every catalogue sync sent the shop name as the description and the shop's e-mail as the
+  support e-mail, overwriting what was set on sudemi; it now sends what the Shop profile saved.
+- **Payouts** and **Help and support** have pages of their own (before on the Orders page and the
+  module page).
+- All new texts in the 12 languages of the module. Includes 1.3.3 (each combination lists only its
+  own photos).
+
 ## 1.3.3
 
 - **Each combination shows its own photos on sudemi.** A combination with photos assigned to it in

@@ -1,6 +1,6 @@
 <?php
 /**
- * Shipping > sudemi shipping: what sudemi buyers pay for shipping per country (GET/POST
+ * sudemi > Shipping: what sudemi buyers pay for shipping per country (GET/POST
  * /integration/v1/shipping), filled in from this shop's carriers on request. The page itself is
  * SudemiAdminPages; this controller only routes.
  *

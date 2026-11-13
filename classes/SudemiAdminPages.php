@@ -18,6 +18,26 @@ class SudemiAdminPages
 {
     const ORDERS = 'AdminSudemiOrders';
     const SHIPPING = 'AdminSudemiShipping';
+    // 1.4.0: the sudemi menu of its own in the left sidebar (PARENT), with these pages.
+    const PARENT = 'AdminSudemi';
+    const DASHBOARD = 'AdminSudemiDashboard';
+    const PRODUCTS = 'AdminSudemiProducts';
+    const PAYOUTS = 'AdminSudemiPayouts';
+    const PROFILE = 'AdminSudemiProfile';
+    const SUPPORT = 'AdminSudemiSupport';
+    const SETTINGS = 'AdminSudemiSettings';
+
+    /** The pages in menu order: [tab class, text key, Material icon of the page title]. */
+    const MENU = [
+        ['AdminSudemiDashboard', 'nav_dashboard', 'insights'],
+        ['AdminSudemiProducts', 'nav_products', 'inventory_2'],
+        ['AdminSudemiOrders', 'nav_orders', 'receipt_long'],
+        ['AdminSudemiShipping', 'nav_shipping', 'local_shipping'],
+        ['AdminSudemiPayouts', 'nav_payouts', 'payments'],
+        ['AdminSudemiProfile', 'nav_profile', 'storefront'],
+        ['AdminSudemiSupport', 'nav_support', 'support_agent'],
+        ['AdminSudemiSettings', 'nav_settings', 'settings'],
+    ];
 
     /** @var Module */
     private $module;
@@ -245,6 +265,7 @@ class SudemiAdminPages
         }
 
         return [
+            'account_state' => $state,
             'account' => isset($this->t['acct_' . $state]) ? $this->t['acct_' . $state] : $state,
             'delay' => sprintf($this->t['payouts_delay'], isset($body['payout_delay_days']) ? (int) $body['payout_delay_days'] : 0),
             'rows' => $rows,
@@ -820,16 +841,381 @@ class SudemiAdminPages
         return $time ? date('Y-m-d H:i', $time) : '';
     }
 
-    private function render($template, array $vars)
+    private function render($template, array $vars, $controller = null)
     {
-        $controller = $template === 'sudemi-shipping.tpl' ? self::SHIPPING : self::ORDERS;
+        if ($controller === null) {
+            $controller = $template === 'sudemi-shipping.tpl' ? self::SHIPPING : self::ORDERS;
+        }
         $this->context->smarty->assign([
             'sudemi' => $vars,
             'sudemi_t' => $this->t,
             'sudemi_messages' => $this->messages,
             'sudemi_token' => self::csrf($controller),
+            'sudemi_hdr' => $this->header($controller),
         ]);
 
         return $this->context->smarty->fetch(_PS_MODULE_DIR_ . 'sudemi/views/templates/admin/' . $template);
+    }
+
+    // ------------------------------------------------------------ header (1.4.0) ----
+
+    /** The settings page: the module's own configuration screen. */
+    public function settingsUrl()
+    {
+        try {
+            $url = (string) $this->context->link->getAdminLink('AdminModules', true, [], ['configure' => 'sudemi']);
+        } catch (\Throwable $e) {
+            $url = '';
+        }
+
+        return $url !== '' ? $url : 'index.php?' . http_build_query(['controller' => 'AdminModules', 'configure' => 'sudemi', 'token' => Tools::getAdminTokenLite('AdminModules')]);
+    }
+
+    /**
+     * The block on top of every sudemi page: the shop, whether sudemi shows its products, and
+     * the menu of the sudemi pages (the same as the sidebar, for shops that hide the sidebar).
+     */
+    public function header($active)
+    {
+        $connected = SudemiClient::isConnected();
+        $status = SudemiHeartbeat::status();
+        $state = 'off';
+        $label = $this->t['hdr_not_connected'];
+        $reason = '';
+        if ($connected) {
+            if (is_array($status) && !empty($status['reachable']) && !empty($status['connected']) && !empty($status['listed'])) {
+                $state = 'ok';
+                $label = $this->t['hdr_listed'];
+            } else {
+                $state = 'warn';
+                $label = $this->t['hdr_not_listed'];
+                if (is_array($status)) {
+                    $reason = !empty($status['message']) ? (string) $status['message'] : (!empty($status['reason']) ? (string) $status['reason'] : '');
+                }
+            }
+        }
+        $nav = [];
+        foreach (self::MENU as $item) {
+            $nav[] = [
+                'key' => $item[0],
+                'label' => $this->t[$item[1]],
+                'icon' => $item[2],
+                'url' => $item[0] === self::SETTINGS ? $this->settingsUrl() : $this->url($item[0]),
+                'active' => $item[0] === $active,
+            ];
+        }
+        $title = '';
+        $icon = 'insights';
+        foreach (self::MENU as $item) {
+            if ($item[0] === $active) {
+                $title = $this->t[$item[1]];
+                $icon = $item[2];
+            }
+        }
+
+        return [
+            'shop' => (string) Configuration::get('PS_SHOP_NAME'),
+            'state' => $state,
+            'label' => $label,
+            'reason' => $reason,
+            'nav' => $nav,
+            'title' => $title,
+            'icon' => $icon,
+            'tagline' => $this->t['hdr_tagline'],
+            'rtl' => $this->isRtl(),
+        ];
+    }
+
+    private function isRtl()
+    {
+        return isset($this->context->language->is_rtl) && (bool) $this->context->language->is_rtl;
+    }
+
+    // ---------------------------------------------------------- dashboard (1.4.0) ----
+
+    public function dashboardPage(array $get)
+    {
+        if (!SudemiClient::isConnected()) {
+            return $this->render('sudemi-dashboard.tpl', ['connected' => false], self::DASHBOARD);
+        }
+        $days = isset($get['days']) && in_array((int) $get['days'], SudemiInsights::PERIODS, true) ? (int) $get['days'] : 30;
+        $result = SudemiInsights::stats($days);
+        $periods = [];
+        foreach (SudemiInsights::PERIODS as $d) {
+            $periods[] = ['days' => $d, 'label' => sprintf($this->t['period_days'], $d), 'url' => $this->url(self::DASHBOARD, ['days' => $d]), 'active' => $d === $days];
+        }
+        $vars = ['connected' => true, 'ok' => $result['ok'], 'periods' => $periods];
+        if (!$result['ok']) {
+            $this->say('warning', $this->t['stats_error']);
+
+            return $this->render('sudemi-dashboard.tpl', $vars, self::DASHBOARD);
+        }
+        $s = $result['stats'];
+        $code = isset($s['currency']) ? (string) $s['currency'] : '';
+        $tot = isset($s['totals']) && is_array($s['totals']) ? $s['totals'] : [];
+        $n = function ($k) use ($tot) {
+            return isset($tot[$k]) ? (int) $tot[$k] : 0;
+        };
+        $money = function ($minor) use ($code) {
+            return SudemiCurrency::format((int) $minor, $code);
+        };
+        $daily = isset($s['daily']) && is_array($s['daily']) ? $s['daily'] : [];
+        $rtl = $this->isRtl();
+        $top = [];
+        foreach ((isset($s['top_products']) && is_array($s['top_products']) ? $s['top_products'] : []) as $p) {
+            $top[] = [
+                'title' => isset($p['title']) ? (string) $p['title'] : (isset($p['external_id']) ? (string) $p['external_id'] : ''),
+                'impressions' => SudemiInsights::count(isset($p['impressions']) ? $p['impressions'] : 0),
+                'views' => SudemiInsights::count(isset($p['detail_views']) ? $p['detail_views'] : 0),
+                'cart' => SudemiInsights::count(isset($p['cart_adds']) ? $p['cart_adds'] : 0),
+                'orders' => SudemiInsights::count(isset($p['orders']) ? $p['orders'] : 0),
+                'units' => SudemiInsights::count(isset($p['units']) ? $p['units'] : 0),
+                'sales' => $money(isset($p['sales_minor']) ? $p['sales_minor'] : 0),
+            ];
+        }
+        $statuses = [];
+        foreach ((isset($s['orders_by_status']) && is_array($s['orders_by_status']) ? $s['orders_by_status'] : []) as $st => $count) {
+            $statuses[] = ['status' => (string) $st, 'label' => isset($this->t['st_' . $st]) ? $this->t['st_' . $st] : (string) $st, 'count' => (int) $count];
+        }
+        $countries = [];
+        foreach ((isset($s['countries']) && is_array($s['countries']) ? $s['countries'] : []) as $c) {
+            $countries[] = [
+                'country' => isset($c['country']) ? (string) $c['country'] : '',
+                'name' => isset($c['country']) ? $this->countryName((string) $c['country']) : '',
+                'orders' => (int) (isset($c['orders']) ? $c['orders'] : 0),
+                'sales' => $money(isset($c['sales_minor']) ? $c['sales_minor'] : 0),
+            ];
+        }
+        $listings = isset($s['listings']) && is_array($s['listings']) ? $s['listings'] : [];
+        $total = isset($listings['total']) ? (int) $listings['total'] : 0;
+        $listed = isset($listings['listed']) ? (int) $listings['listed'] : 0;
+
+        $vars += [
+            'days' => $days,
+            'from' => isset($s['from']) ? (string) $s['from'] : '',
+            'to' => isset($s['to']) ? (string) $s['to'] : '',
+            'kpis' => [
+                ['key' => 'sales', 'label' => $this->t['kpi_sales'], 'value' => $money($n('sales_minor')), 'help' => $this->t['kpi_sales_help'], 'main' => true],
+                ['key' => 'orders', 'label' => $this->t['kpi_orders'], 'value' => SudemiInsights::count($n('orders')), 'help' => sprintf($this->t['kpi_units'], $n('units')), 'main' => true],
+                ['key' => 'average', 'label' => $this->t['kpi_average'], 'value' => $money($n('average_order_minor')), 'help' => '', 'main' => true],
+                ['key' => 'net', 'label' => $this->t['kpi_net'], 'value' => $money($n('net_minor')), 'help' => $this->t['net_note'], 'main' => true],
+                ['key' => 'impressions', 'label' => $this->t['kpi_impressions'], 'value' => SudemiInsights::count($n('impressions')), 'help' => $this->t['kpi_impressions_help'], 'main' => false],
+                ['key' => 'views', 'label' => $this->t['kpi_views'], 'value' => SudemiInsights::count($n('detail_views')), 'help' => $this->t['kpi_views_help'], 'main' => false],
+                ['key' => 'cart', 'label' => $this->t['kpi_cart'], 'value' => SudemiInsights::count($n('cart_adds')), 'help' => '', 'main' => false],
+                ['key' => 'conversion', 'label' => $this->t['kpi_conversion'], 'value' => SudemiInsights::conversion($n('conversion_bps')), 'help' => '', 'main' => false],
+            ],
+            'refunded' => $n('refunded_minor') > 0 ? sprintf($this->t['refunded_commission'], $money($n('refunded_minor')), $money($n('commission_minor'))) : sprintf($this->t['commission_only'], $money($n('commission_minor'))),
+            'chart_seen' => SudemiInsights::chart($daily, 'impressions', 'detail_views', $this->t['kpi_impressions'], $this->t['kpi_views'], $rtl),
+            'chart_sold' => SudemiInsights::chart($daily, 'orders', 'cart_adds', $this->t['kpi_orders'], $this->t['kpi_cart'], $rtl),
+            'top' => $top,
+            'statuses' => $statuses,
+            'countries' => $countries,
+            'listings_line' => sprintf($this->t['listings_summary'], $listed, $total),
+            'listings_total' => $total,
+            'listings_listed' => $listed,
+            'listings_pct' => $total > 0 ? (int) round(100 * $listed / $total) : 0,
+            'products_url' => $this->url(self::PRODUCTS),
+            'not_listed_url' => $this->url(self::PRODUCTS, ['status' => 'not_listed']),
+            'orders_url' => $this->url(self::ORDERS),
+            'latest' => $this->latestOrders(),
+        ];
+
+        return $this->render('sudemi-dashboard.tpl', $vars, self::DASHBOARD);
+    }
+
+    /** The five newest orders, as on the Orders page; [] when sudemi could not be read. */
+    private function latestOrders()
+    {
+        $body = SudemiManage::listOrders(SudemiManage::filters([]), 5);
+        $rows = [];
+        foreach ((is_array($body) && isset($body['orders']) && is_array($body['orders']) ? $body['orders'] : []) as $order) {
+            if (is_array($order) && isset($order['order_id']) && SudemiRequests::isUuid((string) $order['order_id'])) {
+                $rows[] = $this->row($order);
+            }
+        }
+
+        return $rows;
+    }
+
+    private function countryName($iso)
+    {
+        $id = (int) Country::getByIso($iso);
+        $name = $id ? Country::getNameById((int) $this->context->language->id, $id) : '';
+
+        return $name !== '' && $name !== false ? (string) $name : $iso;
+    }
+
+    // ----------------------------------------------------- products on sudemi (1.4.0) ----
+
+    public function productsPage(array $get, array $post)
+    {
+        if (!SudemiClient::isConnected()) {
+            return $this->render('sudemi-products.tpl', ['connected' => false], self::PRODUCTS);
+        }
+        if (isset($post['sudemi_switch'])) {
+            $refused = $this->guard(self::PRODUCTS, $post);
+            if ($refused !== '') {
+                $this->say('error', $refused);
+            } else {
+                $on = (string) $post['sudemi_switch'] === 'on';
+                $title = isset($post['sudemi_title']) ? SudemiManage::text($post['sudemi_title'], 200) : '';
+                $done = SudemiInsights::setEnabled(isset($post['sudemi_listing']) ? (string) $post['sudemi_listing'] : '', $on);
+                if ($done['ok']) {
+                    $this->say('success', sprintf($on ? $this->t['switched_on'] : $this->t['switched_off'], $title));
+                } else {
+                    $this->say('error', $done['error'] === 'not_found' ? $this->t['err_not_found_product'] : $this->errorText($done['error'], ''));
+                }
+            }
+        }
+        $status = isset($get['status']) && in_array($get['status'], ['listed', 'not_listed'], true) ? (string) $get['status'] : 'all';
+        $q = isset($get['q']) ? SudemiManage::text($get['q'], 100) : '';
+        $page = isset($get['page']) ? max(0, (int) $get['page']) : 0;
+        $result = SudemiInsights::listings($status, $q, $page);
+        $tabs = [];
+        foreach (['all' => 'tab_all', 'listed' => 'tab_listed', 'not_listed' => 'tab_not_listed'] as $key => $label) {
+            $tabs[] = ['key' => $key, 'label' => $this->t[$label], 'url' => $this->url(self::PRODUCTS, array_filter(['status' => $key === 'all' ? '' : $key, 'q' => $q])), 'active' => $key === $status];
+        }
+        $vars = [
+            'connected' => true,
+            'ok' => $result['ok'],
+            'tabs' => $tabs,
+            'q' => $q,
+            'status' => $status,
+            'form_controller' => self::PRODUCTS,
+            'form_token' => Tools::getAdminTokenLite(self::PRODUCTS),
+            'rows' => [],
+        ];
+        if (!$result['ok']) {
+            $this->say('warning', $this->t['prod_error']);
+
+            return $this->render('sudemi-products.tpl', $vars, self::PRODUCTS);
+        }
+        $body = $result['listings'];
+        $total = isset($body['total']) ? (int) $body['total'] : 0;
+        $items = isset($body['items']) && is_array($body['items']) ? $body['items'] : [];
+        $base = array_filter(['status' => $status === 'all' ? '' : $status, 'q' => $q]);
+        foreach ($items as $item) {
+            $reasons = [];
+            foreach (SudemiInsights::reasons($item) as $r) {
+                $reasons[] = $this->t['rs_' . $r];
+            }
+            $code = isset($item['currency']) ? (string) $item['currency'] : '';
+            $external = isset($item['external_id']) ? (string) $item['external_id'] : '';
+            list($productId) = SudemiSync::parseExternalId($external);
+            $vars['rows'][] = [
+                'external_id' => $external,
+                'title' => isset($item['title']) ? (string) $item['title'] : $external,
+                'sku' => isset($item['sku']) ? (string) $item['sku'] : '',
+                'price' => isset($item['price_minor']) ? SudemiCurrency::format((int) $item['price_minor'], $code) : '',
+                'stock' => isset($item['quantity']) && $item['quantity'] !== null ? (int) $item['quantity'] : (!empty($item['in_stock']) ? '+' : 0),
+                'images' => isset($item['images']) ? (int) $item['images'] : 0,
+                'countries' => isset($item['shipping_countries']) ? (int) $item['shipping_countries'] : 0,
+                'impressions' => SudemiInsights::count(isset($item['impressions_30d']) ? $item['impressions_30d'] : 0),
+                'views' => SudemiInsights::count(isset($item['detail_views_30d']) ? $item['detail_views_30d'] : 0),
+                'orders' => SudemiInsights::count(isset($item['orders_30d']) ? $item['orders_30d'] : 0),
+                'listed' => !empty($item['listed']),
+                'enabled' => !isset($item['enabled']) || !empty($item['enabled']),
+                'reasons' => $reasons,
+                'edit_url' => $productId > 0 ? $this->productEditUrl($productId) : '',
+            ];
+        }
+        $offset = $page * SudemiInsights::PAGE_SIZE;
+        $vars += [
+            'shown' => $items ? sprintf($this->t['prod_shown'], $offset + 1, $offset + count($items), $total) : '',
+            'prev_url' => $page > 0 ? $this->url(self::PRODUCTS, ['page' => $page - 1] + $base) : '',
+            'next_url' => $offset + count($items) < $total ? $this->url(self::PRODUCTS, ['page' => $page + 1] + $base) : '',
+            'self_url' => $this->url(self::PRODUCTS, ['page' => $page] + $base),
+        ];
+
+        return $this->render('sudemi-products.tpl', $vars, self::PRODUCTS);
+    }
+
+    private function productEditUrl($productId)
+    {
+        try {
+            return (string) $this->context->link->getAdminLink('AdminProducts', true, ['id_product' => (int) $productId], ['id_product' => (int) $productId, 'updateproduct' => 1]);
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    private function errorText($error, $message)
+    {
+        if ($error === 'unreachable') {
+            return $this->t['unreachable'];
+        }
+
+        return sprintf($this->t['err_refused'], $message !== '' ? $message : $error);
+    }
+
+    // ------------------------------------------------------------- payouts (1.4.0) ----
+
+    public function payoutsPage()
+    {
+        if (!SudemiClient::isConnected()) {
+            return $this->render('sudemi-payouts.tpl', ['connected' => false], self::PAYOUTS);
+        }
+        $panel = $this->payoutsPanel();
+        if ($panel === null) {
+            $this->say('warning', $this->t['unreachable']);
+        }
+
+        return $this->render('sudemi-payouts.tpl', ['connected' => true, 'payouts' => $panel, 'orders_url' => $this->url(self::ORDERS)], self::PAYOUTS);
+    }
+
+    // --------------------------------------------------------- shop profile (1.4.0) ----
+
+    public function profilePage(array $post, $supportUrl)
+    {
+        if (!SudemiClient::isConnected()) {
+            return $this->render('sudemi-profile.tpl', ['connected' => false], self::PROFILE);
+        }
+        $form = null;
+        if (isset($post['sudemi_profile_save'])) {
+            $refused = $this->guard(self::PROFILE, $post);
+            $form = [
+                'description' => isset($post['sudemi_description']) ? SudemiManage::text($post['sudemi_description'], 2100) : '',
+                'support_email' => isset($post['sudemi_support_email']) ? SudemiManage::text($post['sudemi_support_email'], 300) : '',
+                'returns_window_days' => isset($post['sudemi_returns_days']) ? trim((string) $post['sudemi_returns_days']) : '',
+            ];
+            if ($refused !== '') {
+                $this->say('error', $refused);
+            } else {
+                $saved = SudemiInsights::saveProfile($form);
+                if ($saved['ok']) {
+                    $this->say('success', $this->t['profile_saved']);
+                    $form = null;
+                } elseif (isset($this->t[$saved['error']])) {
+                    $this->say('error', $this->t[$saved['error']]);
+                } else {
+                    $this->say('error', $this->errorText($saved['error'], isset($saved['message']) ? $saved['message'] : ''));
+                }
+            }
+        }
+        $result = SudemiInsights::shop();
+        if (!$result['ok']) {
+            $this->say('warning', $this->t['profile_error']);
+        }
+        $shop = $result['ok'] ? $result['shop'] : [];
+        $value = function ($key, $fallback) use ($shop, $form) {
+            if ($form !== null && isset($form[$key])) {
+                return (string) $form[$key];
+            }
+
+            return isset($shop[$key]) && $shop[$key] !== null ? (string) $shop[$key] : $fallback;
+        };
+
+        return $this->render('sudemi-profile.tpl', [
+            'connected' => true,
+            'ok' => $result['ok'],
+            'name' => isset($shop['shop_name']) ? (string) $shop['shop_name'] : (string) Configuration::get('PS_SHOP_NAME'),
+            'description' => $value('description', $value('shop_description', '')),
+            'support_email' => $value('support_email', (string) Configuration::get('PS_SHOP_EMAIL')),
+            'returns_window_days' => $value('returns_window_days', '14'),
+            'currency' => isset($shop['currency']) ? (string) $shop['currency'] : SudemiSync::currency(),
+            'origin' => isset($shop['shop_origin']) ? (string) $shop['shop_origin'] : SudemiPairing::shopUrl(),
+            'rename_url' => $supportUrl,
+            'self_url' => $this->url(self::PROFILE),
+        ], self::PROFILE);
     }
 }

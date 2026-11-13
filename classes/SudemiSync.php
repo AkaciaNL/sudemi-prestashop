@@ -744,14 +744,15 @@ class SudemiSync
 
     private static function pushShop()
     {
-        $response = SudemiClient::postSigned('/integration/v1/shop', [
+        // The description, support e-mail and returns window are the ones saved on the module's
+        // Shop profile page (1.4.0). Before, every sync sent the shop name as the description and
+        // overwrote what the seller had set; the name only fills an empty one on sudemi.
+        $response = SudemiClient::postSigned('/integration/v1/shop', array_merge([
             'displayName' => Configuration::get('PS_SHOP_NAME'),
-            'description' => Configuration::get('PS_SHOP_NAME'),
             'languages' => [Language::getIsoById((int) Configuration::get('PS_LANG_DEFAULT'))],
             'currency' => self::currency(),
-            'supportEmail' => Configuration::get('PS_SHOP_EMAIL'),
             'shipsTo' => self::shippingCountries(),
-        ]);
+        ], SudemiInsights::profileForSync()));
         // What sudemi now has as this shop's currency, shown on the configuration page.
         SudemiCurrency::rememberShopAnswer($response, self::currency());
     }

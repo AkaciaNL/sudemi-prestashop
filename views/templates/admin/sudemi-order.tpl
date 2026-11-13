@@ -5,10 +5,8 @@
  *
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
-<div id="sudemi-order">
-{foreach from=$sudemi_messages item=m}
-  <div class="alert alert-{if $m.type == 'error'}danger{elseif $m.type == 'success'}success{elseif $m.type == 'info'}info{else}warning{/if} sudemi-message">{$m.text|escape:'html':'UTF-8'}</div>
-{/foreach}
+<div class="sudemi-ui" id="sudemi-order">
+{include file="./sudemi-header.tpl"}
 {if !$sudemi.connected}
   <div class="alert alert-warning">{$sudemi_t.not_connected|escape:'html':'UTF-8'}</div>
 {else}

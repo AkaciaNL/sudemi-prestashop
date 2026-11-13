@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.3.3');
+define('SUDEMI_VERSION', '1.4.0');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -33,6 +33,7 @@ require_once __DIR__ . '/classes/SudemiRequests.php';
 require_once __DIR__ . '/classes/SudemiManage.php';
 require_once __DIR__ . '/classes/SudemiChanges.php';
 require_once __DIR__ . '/classes/SudemiText.php';
+require_once __DIR__ . '/classes/SudemiInsights.php';
 require_once __DIR__ . '/classes/SudemiAdminPages.php';
 
 class Sudemi extends Module
@@ -59,6 +60,14 @@ class Sudemi extends Module
         // they are current.
         if ($this->id) {
             SudemiOrders::ensureSchema();
+            // Back office only, once per version: the menu and hooks a failed upgrade left out.
+            if (defined('_PS_ADMIN_DIR_') && Configuration::get(self::CONF_SETUP) !== SUDEMI_VERSION) {
+                try {
+                    $this->ensureAdminSetup();
+                } catch (\Throwable $e) {
+                    SudemiLogger::warn('Could not check the sudemi menu: ' . $e->getMessage());
+                }
+            }
         }
 
         $this->displayName = $this->l('sudemi Connector');
@@ -89,7 +98,8 @@ class Sudemi extends Module
             && $this->registerCombinationHooks()
             && $this->registerTrackingHooks()
             && $this->installTabs()
-            && SudemiOrders::ensureSchema();
+            && SudemiOrders::ensureSchema()
+            && Configuration::updateValue(self::CONF_SETUP, SUDEMI_VERSION);
     }
 
     /**
@@ -132,39 +142,36 @@ class Sudemi extends Module
     }
 
     /**
-     * The back-office pages (1.3.0): Orders > sudemi orders and Shipping > sudemi shipping.
-     * Shared with upgrade-1.3.0.php, which adds them on existing installs. Names in the 12
-     * languages of the module, the employee's language where PrestaShop has it.
+     * The sudemi menu in the back office's left sidebar (1.4.0): a top-level "sudemi" entry in the
+     * Sell section with the sudemi pages under it. Before 1.4.0 Orders and Shipping hung under
+     * PrestaShop's own Orders and Shipping menus; they are moved here. Names in the 12 languages
+     * of the module, the employee's language where PrestaShop has it.
+     *
+     * Idempotent: a missing tab is added, a tab in the wrong place is moved, nothing else is
+     * touched. Shared with upgrade-1.4.0.php and ensureAdminSetup().
      */
     public function installTabs()
     {
-        $tabs = [
-            SudemiAdminPages::ORDERS => ['AdminParentOrders', [
-                'en' => 'sudemi orders', 'nl' => 'sudemi-bestellingen', 'tr' => 'sudemi siparişleri', 'de' => 'sudemi-Bestellungen',
-                'fr' => 'Commandes sudemi', 'es' => 'Pedidos de sudemi', 'it' => 'Ordini sudemi', 'pl' => 'Zamówienia sudemi',
-                'ru' => 'Заказы sudemi', 'zh' => 'sudemi 订单', 'ar' => 'طلبات sudemi', 'he' => 'הזמנות sudemi',
-            ]],
-            SudemiAdminPages::SHIPPING => ['AdminParentShipping', [
-                'en' => 'sudemi shipping', 'nl' => 'sudemi-verzending', 'tr' => 'sudemi kargo', 'de' => 'sudemi-Versand',
-                'fr' => 'Livraison sudemi', 'es' => 'Envíos de sudemi', 'it' => 'Spedizioni sudemi', 'pl' => 'Wysyłka sudemi',
-                'ru' => 'Доставка sudemi', 'zh' => 'sudemi 配送', 'ar' => 'شحن sudemi', 'he' => 'משלוח sudemi',
-            ]],
-        ];
-        foreach ($tabs as $class => $spec) {
-            if ((int) Tab::getIdFromClassName($class) > 0) {
+        $parentId = (int) Tab::getIdFromClassName(SudemiAdminPages::PARENT);
+        if ($parentId <= 0) {
+            $sell = (int) Tab::getIdFromClassName('SELL');
+            $parentId = $this->addTab(SudemiAdminPages::PARENT, $sell > 0 ? $sell : 0, ['en' => 'sudemi'], 'storefront');
+            if ($parentId <= 0) {
+                return false;
+            }
+        }
+        foreach (self::TAB_NAMES as $class => $names) {
+            $id = (int) Tab::getIdFromClassName($class);
+            if ($id > 0) {
+                $tab = new Tab($id);
+                if ((int) $tab->id_parent !== $parentId || !$tab->active) {
+                    $tab->id_parent = $parentId;
+                    $tab->active = 1;
+                    $tab->update();
+                }
                 continue;
             }
-            $tab = new Tab();
-            $tab->class_name = $class;
-            $tab->module = $this->name;
-            $tab->id_parent = (int) Tab::getIdFromClassName($spec[0]);
-            $tab->active = 1;
-            $tab->name = [];
-            foreach (Language::getLanguages(false) as $language) {
-                $iso = strtolower((string) $language['iso_code']);
-                $tab->name[(int) $language['id_lang']] = isset($spec[1][$iso]) ? $spec[1][$iso] : $spec[1]['en'];
-            }
-            if (!$tab->add()) {
+            if ($this->addTab($class, $parentId, $names, '') <= 0) {
                 return false;
             }
         }
@@ -172,14 +179,85 @@ class Sudemi extends Module
         return true;
     }
 
+    /** The pages of the sudemi menu, in order, with their names in the module's languages. */
+    const TAB_NAMES = [
+        'AdminSudemiDashboard' => ['en' => 'Dashboard', 'nl' => 'Dashboard', 'tr' => 'Genel bakış', 'de' => 'Übersicht', 'fr' => 'Tableau de bord', 'es' => 'Panel', 'it' => 'Panoramica', 'pl' => 'Pulpit', 'ru' => 'Обзор', 'zh' => '概览', 'ar' => 'نظرة عامة', 'he' => 'סקירה'],
+        'AdminSudemiProducts' => ['en' => 'Products on sudemi', 'nl' => 'Producten op sudemi', 'tr' => 'sudemi\'deki ürünler', 'de' => 'Produkte auf sudemi', 'fr' => 'Produits sur sudemi', 'es' => 'Productos en sudemi', 'it' => 'Prodotti su sudemi', 'pl' => 'Produkty w sudemi', 'ru' => 'Товары на sudemi', 'zh' => 'sudemi 上的商品', 'ar' => 'المنتجات على sudemi', 'he' => 'מוצרים ב-sudemi'],
+        'AdminSudemiOrders' => ['en' => 'Orders', 'nl' => 'Bestellingen', 'tr' => 'Siparişler', 'de' => 'Bestellungen', 'fr' => 'Commandes', 'es' => 'Pedidos', 'it' => 'Ordini', 'pl' => 'Zamówienia', 'ru' => 'Заказы', 'zh' => '订单', 'ar' => 'الطلبات', 'he' => 'הזמנות'],
+        'AdminSudemiShipping' => ['en' => 'Shipping costs', 'nl' => 'Verzendkosten', 'tr' => 'Kargo ücretleri', 'de' => 'Versandkosten', 'fr' => 'Frais de livraison', 'es' => 'Gastos de envío', 'it' => 'Costi di spedizione', 'pl' => 'Koszty wysyłki', 'ru' => 'Стоимость доставки', 'zh' => '运费设置', 'ar' => 'تكاليف الشحن', 'he' => 'דמי משלוח'],
+        'AdminSudemiPayouts' => ['en' => 'Payouts to you', 'nl' => 'Uitbetalingen aan jou', 'tr' => 'Size yapılan ödemeler', 'de' => 'Auszahlungen an Sie', 'fr' => 'Vos versements', 'es' => 'Tus liquidaciones', 'it' => 'I tuoi accrediti', 'pl' => 'Twoje wypłaty', 'ru' => 'Ваши выплаты', 'zh' => '给您的打款', 'ar' => 'المستحقات المحوّلة إليك', 'he' => 'תשלומים אליכם'],
+        'AdminSudemiProfile' => ['en' => 'Shop profile', 'nl' => 'Winkelprofiel', 'tr' => 'Mağaza profili', 'de' => 'Shopprofil', 'fr' => 'Profil de la boutique', 'es' => 'Perfil de la tienda', 'it' => 'Profilo del negozio', 'pl' => 'Profil sklepu', 'ru' => 'Профиль магазина', 'zh' => '店铺资料', 'ar' => 'ملف المتجر', 'he' => 'פרופיל החנות'],
+        'AdminSudemiSupport' => ['en' => 'Help and support', 'nl' => 'Hulp en support', 'tr' => 'Yardım ve destek', 'de' => 'Hilfe und Support', 'fr' => 'Aide et support', 'es' => 'Ayuda y soporte', 'it' => 'Aiuto e assistenza', 'pl' => 'Pomoc i wsparcie', 'ru' => 'Помощь и поддержка', 'zh' => '帮助与支持', 'ar' => 'المساعدة والدعم', 'he' => 'עזרה ותמיכה'],
+        'AdminSudemiSettings' => ['en' => 'Settings', 'nl' => 'Instellingen', 'tr' => 'Ayarlar', 'de' => 'Einstellungen', 'fr' => 'Réglages', 'es' => 'Ajustes', 'it' => 'Impostazioni', 'pl' => 'Ustawienia', 'ru' => 'Настройки', 'zh' => '设置', 'ar' => 'الإعدادات', 'he' => 'הגדרות'],
+    ];
+
+    /** Adds one tab of this module; its id, or 0 when PrestaShop refused it. */
+    private function addTab($class, $parentId, array $names, $icon)
+    {
+        $tab = new Tab();
+        $tab->class_name = $class;
+        $tab->module = $this->name;
+        $tab->id_parent = (int) $parentId;
+        $tab->active = 1;
+        if ($icon !== '' && property_exists($tab, 'icon')) {
+            $tab->icon = $icon;
+        }
+        $tab->name = [];
+        foreach (Language::getLanguages(false) as $language) {
+            $iso = strtolower((string) $language['iso_code']);
+            $tab->name[(int) $language['id_lang']] = isset($names[$iso]) ? $names[$iso] : $names['en'];
+        }
+
+        return $tab->add() ? (int) $tab->id : 0;
+    }
+
     private function uninstallTabs()
     {
-        foreach ([SudemiAdminPages::ORDERS, SudemiAdminPages::SHIPPING] as $class) {
+        foreach (array_merge(array_keys(self::TAB_NAMES), [SudemiAdminPages::PARENT]) as $class) {
             $id = (int) Tab::getIdFromClassName($class);
             if ($id > 0) {
                 (new Tab($id))->delete();
             }
         }
+    }
+
+    /** Set to the module version once the menu and hooks were checked for it. */
+    const CONF_SETUP = 'SUDEMI_SETUP_VERSION';
+
+    /**
+     * Makes sure the sudemi menu and every hook are there (1.4.0).
+     *
+     * A failed or skipped upgrade step left shops without them: on a PrestaShop 9 shop upgraded
+     * to 1.3.0 the order-table repair failed first, so the steps after it (the Orders and Shipping
+     * pages, the tracking hooks) never ran and the version was recorded anyway. The pages then
+     * said "The controller AdminSudemiOrders is missing or invalid". Checked once per version, on
+     * a back-office page; repairs only what is missing.
+     */
+    public function ensureAdminSetup($force = false)
+    {
+        if (!$force && Configuration::get(self::CONF_SETUP) === SUDEMI_VERSION) {
+            return true;
+        }
+        $ok = $this->installTabs()
+            && $this->registerHook('actionProductUpdate')
+            && $this->registerHook('actionUpdateQuantity')
+            && $this->registerHook('actionAdminControllerSetMedia')
+            && $this->registerHook('actionOrderStatusPostUpdate')
+            && $this->registerHook('moduleRoutes')
+            && $this->registerHook('actionOrderSlipAdd')
+            && $this->registerHook('actionCarrierUpdate')
+            && $this->registerHook('actionObjectCarrierUpdateAfter')
+            && $this->registerWithdrawalHooks()
+            && $this->registerOrderPageHooks()
+            && $this->registerCombinationHooks()
+            && $this->registerTrackingHooks();
+        if ($ok) {
+            Configuration::updateValue(self::CONF_SETUP, SUDEMI_VERSION);
+        } else {
+            SudemiLogger::warn('The sudemi menu or a hook could not be set up; it is tried again on the next back-office page.');
+        }
+
+        return $ok;
     }
 
     /**
@@ -623,7 +701,40 @@ class Sudemi extends Module
             }
         }
 
-        return $output . $this->renderScreen();
+        return $this->renderScreen($output);
+    }
+
+    /**
+     * sudemi > Support (1.4.0): the tickets, on a page of their own. The same handlers as the
+     * module page had (permission and CSRF checked first).
+     */
+    public function supportPage()
+    {
+        $output = '';
+        if (Tools::isSubmit('sudemi_support_create')) {
+            $output .= $this->guard('sudemi_support_create');
+            if ($output === '') {
+                $output .= $this->supportCreate();
+            }
+        }
+        if (Tools::isSubmit('sudemi_support_reply')) {
+            $output .= $this->guard('sudemi_support_reply');
+            if ($output === '') {
+                $output .= $this->supportReply();
+            }
+        }
+        $pages = new SudemiAdminPages($this, $this->context);
+        $this->context->smarty->assign([
+            'sudemi_output' => $output,
+            'sudemi_hdr' => $pages->header(SudemiAdminPages::SUPPORT),
+            'sudemi_messages' => [],
+            'sudemi_support' => SudemiClient::isConnected() ? $this->supportSection() : null,
+            'sudemi_support_title' => $this->l('Support'),
+            'sudemi_support_not_connected' => $this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'),
+            'sudemi_token' => $this->csrfToken(),
+        ]);
+
+        return $this->display(__FILE__, 'views/templates/admin/sudemi-support.tpl');
     }
 
     /** Opens a ticket from the form. The form's values are kept on a failure, so nothing typed is lost. */
@@ -776,6 +887,13 @@ class Sudemi extends Module
             ],
             'list_url' => $this->supportUrl(null),
         ];
+        // "Ask to rename" on the Shop profile page: a ticket ready to send (the name buyers see is
+        // changed by sudemi support only, owner 2026-11-09).
+        if (!$this->supportSent && Tools::getValue('sudemi_rename') && !Tools::isSubmit('sudemi_support_create')) {
+            $section['form']['category'] = 'ACCOUNT';
+            $section['form']['subject'] = SudemiText::get($this, 'rename_subject');
+            $section['form']['message'] = sprintf(SudemiText::get($this, 'rename_message'), (string) Configuration::get('PS_SHOP_NAME'));
+        }
 
         $ticket = $this->supportTicket;
         $wanted = (string) Tools::getValue('sudemi_ticket');
@@ -1174,7 +1292,7 @@ class Sudemi extends Module
         return $this->l('sudemi refused requests from this site: this shop is connected to sudemi under a different address. If this site is a staging copy or a restored backup, disconnect sudemi here. If the shop has moved to this address, connect it again.');
     }
 
-    private function renderScreen()
+    private function renderScreen($output = '')
     {
         $connected = SudemiClient::isConnected();
         $claimUrl = SudemiPairing::claimUrl();
@@ -1185,7 +1303,11 @@ class Sudemi extends Module
             $status['message'] = $this->siteMismatchMessage(isset($status['paired']) ? (string) $status['paired'] : '');
         }
 
+        $pages = new SudemiAdminPages($this, $this->context);
         $this->context->smarty->assign([
+            'sudemi_output' => $output,
+            'sudemi_hdr' => $pages->header(SudemiAdminPages::SETTINGS),
+            'sudemi_messages' => [],
             'sudemi_history_error' => $this->l('Could not reach sudemi to load the order history just now. Nothing is wrong with the orders themselves; try again shortly.'),
             'sudemi_connected' => $connected,
             'sudemi_status' => $status,
@@ -1203,9 +1325,7 @@ class Sudemi extends Module
             'sudemi_shipping_preview' => $this->shippingPreview(),
             'sudemi_carriers' => SudemiShipping::activeCarriers(),
             'sudemi_chosen_carriers' => SudemiShipping::chosenCarriers(),
-            'sudemi_history' => $connected ? $this->orderHistory() : null,
             'sudemi_currency' => $connected ? $this->currencySection() : null,
-            'sudemi_support' => $connected ? $this->supportSection() : null,
             'sudemi_requests' => $connected ? $this->requestSection() : null,
             'sudemi_rq_action' => $this->requestFormUrl(),
             'sudemi_auto' => [
@@ -1215,11 +1335,6 @@ class Sudemi extends Module
                 'help' => SudemiText::get($this, 'auto_help'),
                 'save' => SudemiText::get($this, 'save'),
             ],
-            'sudemi_links' => $connected ? [
-                'title' => SudemiText::get($this, 'links_title'),
-                'orders' => ['label' => SudemiText::get($this, 'orders_title'), 'url' => $this->adminUrl(SudemiAdminPages::ORDERS, [])],
-                'shipping' => ['label' => SudemiText::get($this, 'ship_title'), 'url' => $this->adminUrl(SudemiAdminPages::SHIPPING, [])],
-            ] : null,
             'sudemi_support_not_connected' => $this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'),
             'sudemi_support_title' => $this->l('Support'),
             'sudemi_supported' => $supported,

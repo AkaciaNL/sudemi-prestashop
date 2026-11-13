@@ -4,10 +4,8 @@
  *
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
-<div id="sudemi-orders">
-{foreach from=$sudemi_messages item=m}
-  <div class="alert alert-{if $m.type == 'error'}danger{elseif $m.type == 'success'}success{elseif $m.type == 'info'}info{else}warning{/if} sudemi-message">{$m.text|escape:'html':'UTF-8'}</div>
-{/foreach}
+<div class="sudemi-ui" id="sudemi-orders">
+{include file="./sudemi-header.tpl"}
 {if !$sudemi.connected}
   <div class="alert alert-warning">{$sudemi_t.not_connected|escape:'html':'UTF-8'}</div>
 {else}
@@ -72,7 +70,7 @@
               <td>{$row.date|escape:'html':'UTF-8'}</td>
               <td>{$row.items|escape:'html':'UTF-8'}</td>
               <td>{$row.country|escape:'html':'UTF-8'}</td>
-              <td>{$row.status_label|escape:'html':'UTF-8'}{if $row.respond_by}<br /><small>{$sudemi_t.respond_by|escape:'html':'UTF-8'}: {$row.respond_by|escape:'html':'UTF-8'}</small>{/if}</td>
+              <td><span class="sudemi-badge {if $row.status == 'DELIVERED' || $row.status == 'PAID' || $row.status == 'SHIPPED'}sudemi-badge-ok{elseif $row.status == 'AWAITING_SELLER' || $row.status == 'ACCEPTED'}sudemi-badge-warn{elseif $row.status == 'REFUNDED' || $row.status == 'CANCELLED' || $row.status == 'DECLINED'}sudemi-badge-bad{/if}">{$row.status_label|escape:'html':'UTF-8'}</span>{if $row.respond_by}<br /><small>{$sudemi_t.respond_by|escape:'html':'UTF-8'}: {$row.respond_by|escape:'html':'UTF-8'}</small>{/if}</td>
               <td>{$row.total|escape:'html':'UTF-8'}</td>
               <td>{$row.net|escape:'html':'UTF-8'}</td>
               <td>{$row.refunded|escape:'html':'UTF-8'}</td>

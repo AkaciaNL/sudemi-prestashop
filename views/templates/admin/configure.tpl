@@ -4,8 +4,11 @@
  *
  * @license https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0
  *}
-<div class="panel">
-  <div class="panel-heading"><i class="icon-shopping-cart"></i> sudemi</div>
+<div class="sudemi-ui" id="sudemi-settings">
+{include file="./sudemi-header.tpl"}
+{$sudemi_output nofilter}
+<div class="panel" id="sudemi-connection">
+  <div class="panel-heading">{l s='Connection' mod='sudemi'}</div>
 
   {if !$sudemi_supported}
     <div class="alert alert-danger">
@@ -58,7 +61,9 @@
        module active, catalogue intact, settings right. The cause is usually no cron entry on
        the host, and without this the first sign of it is a seller wondering where the orders
        went. *}
-    <h4>{l s='Listing status' mod='sudemi'}</h4>
+  </div>
+  <div class="panel" id="sudemi-listing">
+    <div class="panel-heading">{l s='Listing status' mod='sudemi'}</div>
 
     {if !$sudemi_status}
       <div class="alert alert-warning">
@@ -102,54 +107,16 @@
       </tr>
     </table>
 
-    {if $sudemi_links}
-      <h4>{$sudemi_links.title|escape:'html':'UTF-8'}</h4>
-      <p id="sudemi-links">
-        <a class="btn btn-default" href="{$sudemi_links.orders.url|escape:'html':'UTF-8'}">{$sudemi_links.orders.label|escape:'html':'UTF-8'}</a>
-        <a class="btn btn-default" href="{$sudemi_links.shipping.url|escape:'html':'UTF-8'}">{$sudemi_links.shipping.label|escape:'html':'UTF-8'}</a>
-      </p>
-    {/if}
-
+  </div>
+  <div class="panel" id="sudemi-orders-settings">
+    <div class="panel-heading">{l s='Orders and returns' mod='sudemi'}</div>
     <form method="post" action="{$sudemi_action|escape:'html':'UTF-8'}" id="sudemi-autoconfirm">
       <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
-      <h4>{$sudemi_auto.title|escape:'html':'UTF-8'}</h4>
+      <p><strong>{$sudemi_auto.title|escape:'html':'UTF-8'}</strong></p>
       <div class="checkbox"><label><input type="checkbox" name="sudemi_auto_on" value="1"{if $sudemi_auto.on} checked{/if} /> {$sudemi_auto.label|escape:'html':'UTF-8'}</label></div>
       <p class="help-block">{$sudemi_auto.help|escape:'html':'UTF-8'}</p>
       <button type="submit" name="sudemi_autoconfirm" value="1" class="btn btn-default">{$sudemi_auto.save|escape:'html':'UTF-8'}</button>
     </form>
-
-    {if $sudemi_history === null}
-      <div class="alert alert-warning">{$sudemi_history_error|escape:'html':'UTF-8'}</div>
-    {else}
-      <h4>{$sudemi_history.labels.title|escape:'html':'UTF-8'}</h4>
-      {if $sudemi_history.awaiting}<div class="alert alert-warning">{$sudemi_history.awaiting|escape:'html':'UTF-8'}</div>{/if}
-      {if $sudemi_history.rows}
-        <table class="table" id="sudemi-order-history">
-          <thead><tr>
-            <th>{$sudemi_history.labels.order|escape:'html':'UTF-8'}</th>
-            <th>{$sudemi_history.labels.items|escape:'html':'UTF-8'}</th>
-            <th>{$sudemi_history.labels.status|escape:'html':'UTF-8'}</th>
-            <th>{$sudemi_history.labels.paid|escape:'html':'UTF-8'}</th>
-            <th>{$sudemi_history.labels.net|escape:'html':'UTF-8'}</th>
-            <th>{$sudemi_history.labels.customer|escape:'html':'UTF-8'}</th>
-          </tr></thead>
-          <tbody>
-          {foreach from=$sudemi_history.rows item=row}
-            <tr>
-              <td><code>{$row.id|escape:'html':'UTF-8'}</code><br><small>{$row.date|escape:'html':'UTF-8'}</small></td>
-              <td>{$row.items|escape:'html':'UTF-8'}</td>
-              <td>{$row.status|escape:'html':'UTF-8'}</td>
-              <td>{$row.paid|escape:'html':'UTF-8'}</td>
-              <td>{$row.net|escape:'html':'UTF-8'}</td>
-              <td>{$row.customer|escape:'html':'UTF-8'}</td>
-            </tr>
-          {/foreach}
-          </tbody>
-        </table>
-      {else}
-        <p class="help-block">{$sudemi_history.labels.empty|escape:'html':'UTF-8'}</p>
-      {/if}
-    {/if}
 
     {* Buyers' return requests (from the heartbeat). Reasons are plain text from sudemi: escaped. *}
     {if $sudemi_requests}
@@ -195,7 +162,9 @@
       </div>
     {/if}
 
-    <h4>{l s='Delivery to sudemi buyers' mod='sudemi'}</h4>
+  </div>
+  <div class="panel" id="sudemi-delivery">
+    <div class="panel-heading">{l s='Delivery to sudemi buyers' mod='sudemi'}</div>
     {if $sudemi_shipping_preview}
       <p>{l s='Shipping prices sent to sudemi (from your carriers; one item, your first product):' mod='sudemi'}
         {foreach from=$sudemi_shipping_preview item=rate name=rates}{$rate.country|escape:'html':'UTF-8'} {$rate.cost|escape:'html':'UTF-8'} ({$rate.carrier|escape:'html':'UTF-8'}){if !$smarty.foreach.rates.last}, {/if}{/foreach}</p>
@@ -216,7 +185,10 @@
       <p class="help-block">{l s='Buyers see the sum as the latest delivery estimate. Set your real times; the defaults are deliberately cautious.' mod='sudemi'}</p>
     </form>
 
-    <h4>{l s='Set on sudemi, not here' mod='sudemi'}</h4>
+  </div>
+  <div class="panel" id="sudemi-catalogue">
+    <div class="panel-heading">{l s='Catalogue and connection' mod='sudemi'}</div>
+    <p><strong>{l s='Set on sudemi, not here' mod='sudemi'}</strong></p>
     <p>{l s='Your legal name, country, trader status and VAT number decide what a buyer is owed, so they are confirmed once on sudemi and changed there. This module cannot edit them.' mod='sudemi'}</p>
 
     <form method="post" action="{$sudemi_action|escape:'html':'UTF-8'}" style="display:inline">
@@ -253,7 +225,10 @@
   {/if}
 
   {if $sudemi_log}
-    <h4>{l s='Recent activity' mod='sudemi'}</h4>
+  </div>
+  <div class="panel" id="sudemi-activity">
+    <div class="panel-heading">{l s='Recent activity' mod='sudemi'}</div>
+    <div class="sudemi-scroll" style="max-height:420px;overflow-y:auto">
     <table class="table">
       {foreach from=$sudemi_log item=entry}
         <tr>
@@ -262,100 +237,8 @@
         </tr>
       {/foreach}
     </table>
+    </div>
   {/if}
 </div>
-
-{* Support tickets with sudemi. Ticket bodies are plain text from sudemi: escaped, never HTML,
-   with line breaks kept by white-space:pre-wrap. *}
-<div class="panel" id="sudemi-support">
-  <div class="panel-heading"><i class="icon-question-sign"></i> {$sudemi_support_title|escape:'html':'UTF-8'}</div>
-  {if !$sudemi_support}
-    <p class="help-block">{$sudemi_support_not_connected|escape:'html':'UTF-8'}</p>
-  {else}
-    {assign var=sl value=$sudemi_support.labels}
-    <p>{$sl.intro|escape:'html':'UTF-8'}</p>
-    {if $sudemi_support.error}<div class="alert alert-danger">{$sudemi_support.error|escape:'html':'UTF-8'}</div>{/if}
-
-    {if $sudemi_support.ticket}
-      {assign var=t value=$sudemi_support.ticket}
-      <h4 id="sudemi-ticket">{$t.number|escape:'html':'UTF-8'} - {$t.subject|escape:'html':'UTF-8'}</h4>
-      <p><span class="label label-default">{$t.category|escape:'html':'UTF-8'}</span>
-        <span class="label {if $t.closed}label-default{else}label-info{/if}">{$t.status|escape:'html':'UTF-8'}</span>
-        <a href="{$sudemi_support.list_url|escape:'html':'UTF-8'}" style="margin-left:1em">{$sl.back|escape:'html':'UTF-8'}</a></p>
-      {foreach from=$t.messages item=m}
-        <div class="sudemi-message" style="border-left:4px solid {if $m.support}#25b9d7{else}#bbcdd2{/if};background:{if $m.support}#eefafc{else}#f8f8f8{/if};padding:.5em 1em;margin:0 0 .75em {if $m.support}0{else}2em{/if}">
-          <p style="margin:0 0 .25em"><strong>{if $m.support}{$sl.support|escape:'html':'UTF-8'}{else}{$sl.you|escape:'html':'UTF-8'}{/if}</strong>
-            <small class="text-muted">{$m.at|escape:'html':'UTF-8'}</small></p>
-          <div style="white-space:pre-wrap;word-wrap:break-word">{$m.body|escape:'html':'UTF-8'}</div>
-        </div>
-      {/foreach}
-      {if $t.closed}<p class="help-block">{$sl.closed|escape:'html':'UTF-8'}</p>{/if}
-      <form method="post" action="{$sudemi_support.list_url|escape:'html':'UTF-8'}">
-        <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
-        <input type="hidden" name="sudemi_ticket" value="{$t.id|escape:'html':'UTF-8'}" />
-        <div class="form-group">
-          <label for="sudemi-support-reply">{$sl.reply|escape:'html':'UTF-8'}</label>
-          <textarea id="sudemi-support-reply" name="sudemi_support_reply_message" rows="5" maxlength="10000" required class="form-control">{$sudemi_support.form.reply|escape:'html':'UTF-8'}</textarea>
-        </div>
-        <button type="submit" name="sudemi_support_reply" class="btn btn-primary">{$sl.send_reply|escape:'html':'UTF-8'}</button>
-      </form>
-      <hr />
-    {/if}
-
-    <h4>{$sl.tickets|escape:'html':'UTF-8'}</h4>
-    {if $sudemi_support.tickets === null}
-      <div class="alert alert-warning">{$sl.list_error|escape:'html':'UTF-8'}</div>
-    {elseif $sudemi_support.tickets}
-      <table class="table" id="sudemi-support-tickets">
-        <thead><tr>
-          <th>{$sl.number|escape:'html':'UTF-8'}</th>
-          <th>{$sl.subject|escape:'html':'UTF-8'}</th>
-          <th>{$sl.status|escape:'html':'UTF-8'}</th>
-          <th>{$sl.updated|escape:'html':'UTF-8'}</th>
-          <th></th>
-        </tr></thead>
-        <tbody>
-        {foreach from=$sudemi_support.tickets item=row}
-          <tr>
-            <td><code>{$row.number|escape:'html':'UTF-8'}</code></td>
-            <td>{$row.subject|escape:'html':'UTF-8'}<br><small class="text-muted">{$row.category|escape:'html':'UTF-8'}</small></td>
-            <td>{$row.status|escape:'html':'UTF-8'}</td>
-            <td>{$row.updated|escape:'html':'UTF-8'}</td>
-            <td><a class="btn btn-default btn-sm" href="{$row.url|escape:'html':'UTF-8'}">{$sl.view|escape:'html':'UTF-8'}</a></td>
-          </tr>
-        {/foreach}
-        </tbody>
-      </table>
-    {else}
-      <p class="help-block">{$sl.empty|escape:'html':'UTF-8'}</p>
-    {/if}
-
-    <h4>{$sl.new|escape:'html':'UTF-8'}</h4>
-    <form method="post" action="{$sudemi_support.list_url|escape:'html':'UTF-8'}">
-      <input type="hidden" name="sudemi_token" value="{$sudemi_token|escape:'html':'UTF-8'}" />
-      <div class="form-group">
-        <label for="sudemi-support-category">{$sl.category|escape:'html':'UTF-8'}</label>
-        <select id="sudemi-support-category" name="sudemi_support_category" required class="form-control">
-          <option value="">{$sl.choose|escape:'html':'UTF-8'}</option>
-          {foreach from=$sudemi_support.categories key=value item=label}
-            <option value="{$value|escape:'html':'UTF-8'}" {if $sudemi_support.form.category == $value}selected{/if}>{$label|escape:'html':'UTF-8'}</option>
-          {/foreach}
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="sudemi-support-subject">{$sl.subject|escape:'html':'UTF-8'}</label>
-        <input type="text" id="sudemi-support-subject" name="sudemi_support_subject" minlength="3" maxlength="200" required class="form-control" value="{$sudemi_support.form.subject|escape:'html':'UTF-8'}" />
-      </div>
-      <div class="form-group">
-        <label for="sudemi-support-message">{$sl.message|escape:'html':'UTF-8'}</label>
-        <textarea id="sudemi-support-message" name="sudemi_support_message" rows="6" maxlength="10000" required class="form-control">{$sudemi_support.form.message|escape:'html':'UTF-8'}</textarea>
-      </div>
-      <div class="form-group">
-        <label for="sudemi-support-order">{$sl.order|escape:'html':'UTF-8'}</label>
-        <input type="text" id="sudemi-support-order" name="sudemi_support_order" maxlength="36" class="form-control" style="max-width:24em" value="{$sudemi_support.form.order|escape:'html':'UTF-8'}" />
-        <p class="help-block">{$sl.order_help|escape:'html':'UTF-8'}</p>
-      </div>
-      <button type="submit" name="sudemi_support_create" class="btn btn-primary">{$sl.send|escape:'html':'UTF-8'}</button>
-    </form>
-  {/if}
 </div>
+

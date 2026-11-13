@@ -1,6 +1,6 @@
 <?php
 /**
- * Orders > sudemi orders: the shop's orders as sudemi holds them (list, one order, bulk actions,
+ * sudemi > Orders: the shop's orders as sudemi holds them (list, one order, bulk actions,
  * CSV export). The page itself is SudemiAdminPages; this controller only routes.
  *
  * PrestaShop checks the page token in the address before this runs (AdminController::init); every
