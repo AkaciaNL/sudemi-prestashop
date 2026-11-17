@@ -2,6 +2,12 @@
 
 ## 1.4.2
 
+- **Fix: a buyer's name or address with characters PrestaShop does not accept no longer stops
+  the order.** PrestaShop refuses digits and some symbols in names (for example "Jan (office)")
+  and some symbols in street lines, city and phone, and then threw an error that stopped
+  accepting and recording the paid order. The module now cleans each field to what PrestaShop
+  accepts (the buyer's exact address stays on sudemi). If PrestaShop still refuses the address,
+  the order is kept and a note says to check the address in your sudemi account.
 - **Ready for PrestaShop Addons.** A module logo (`logo.png`, 32x32, the sudemi mark), the licence
   header with author, copyright and licence in every file, the `_PS_VERSION_` guard in every PHP
   file (also the translation files), and the code formatted to the PrestaShop coding standard

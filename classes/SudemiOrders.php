@@ -890,15 +890,26 @@ class SudemiOrders
             isset($to['country']) ? (string) $to['country'] : 'NL'
         );
         $address->alias = 'sudemi';
-        $address->firstname = $first === '' ? '-' : $first;
-        $address->lastname = $last === '' ? '-' : $last;
-        $address->address1 = isset($to['line1']) ? (string) $to['line1'] : '';
-        $address->address2 = isset($to['line2']) ? (string) $to['line2'] : '';
-        $address->postcode = isset($to['postal_code']) ? (string) $to['postal_code'] : '';
-        $address->city = isset($to['city']) ? (string) $to['city'] : '';
-        $address->phone = isset($to['phone']) ? (string) $to['phone'] : '';
-        if (!$address->add()) {
-            self::note($order, 'The delivery address from sudemi could not be stored.');
+        // PrestaShop refuses characters a real name or address can contain (digits in a name,
+        // "(office)", "@" in a street line), and add() then throws instead of returning false.
+        // Each field is cleaned to what PrestaShop accepts; the buyer's exact address stays on
+        // sudemi. A value that still fails would stop the whole order step, so it is caught.
+        $address->firstname = self::fitName($first);
+        $address->lastname = self::fitName($last);
+        $address->address1 = self::fitField(isset($to['line1']) ? (string) $to['line1'] : '', 'isAddress', '/[!<>?=+@{}_$%]/u', 128);
+        $address->address2 = self::fitField(isset($to['line2']) ? (string) $to['line2'] : '', 'isAddress', '/[!<>?=+@{}_$%]/u', 128);
+        $address->postcode = self::fitField(isset($to['postal_code']) ? (string) $to['postal_code'] : '', 'isPostCode', '/[^a-zA-Z 0-9-]/', 12);
+        $address->city = self::fitField(isset($to['city']) ? (string) $to['city'] : '', 'isCityName', '/[!<>;?=+@#"°{}_$%]/u', 64);
+        $address->phone = self::fitField(isset($to['phone']) ? (string) $to['phone'] : '', 'isPhoneNumber', '/[^+0-9. ()\/-]/', 32);
+        try {
+            $stored = $address->add();
+        } catch (Exception $e) {
+            $stored = false;
+            SudemiLogger::warn('Order ' . $order->reference . ': address refused by PrestaShop: ' . $e->getMessage());
+        }
+        if (!$stored) {
+            self::note($order, 'The delivery address from sudemi could not be stored. The order '
+                . 'is paid; see the address on the order in your sudemi account before shipping.');
 
             return;
         }
@@ -908,6 +919,51 @@ class SudemiOrders
         // shop issues the buyer no invoice and has no reason to hold more of their data.
         $order->id_address_invoice = (int) $address->id;
         $order->update();
+    }
+
+    /**
+     * A name PrestaShop accepts (Validate::isName): digits and the symbols it refuses become
+     * spaces, a dot only stays before a space ("J. Smith"). Never empty.
+     *
+     * @param string $name
+     *
+     * @return string
+     */
+    public static function fitName($name)
+    {
+        $name = trim((string) $name);
+        if ($name !== '' && Validate::isName($name)) {
+            return Tools::substr($name, 0, 255);
+        }
+        $name = preg_replace('/[0-9!<>,;?=+()\/\\\\@#"°*`{}_^$%:¤\[\]|]/u', ' ', $name);
+        $name = preg_replace('/[.。](?!\s|$)/u', ' ', (string) $name);
+        $name = trim((string) preg_replace('/\s+/u', ' ', (string) $name));
+        if ($name === '' || !Validate::isName($name)) {
+            return '-';
+        }
+
+        return Tools::substr($name, 0, 255);
+    }
+
+    /**
+     * A field PrestaShop accepts: kept when its validator passes, otherwise the refused
+     * characters are dropped. Cut to the column size.
+     *
+     * @param string $value
+     * @param string $validator Validate method, e.g. isAddress
+     * @param string $refused pattern of the characters to drop
+     * @param int $max
+     *
+     * @return string
+     */
+    public static function fitField($value, $validator, $refused, $max)
+    {
+        $value = trim((string) $value);
+        if ($value !== '' && !Validate::$validator($value)) {
+            $value = trim((string) preg_replace('/\s+/u', ' ', (string) preg_replace($refused, ' ', $value)));
+        }
+
+        return Tools::substr($value, 0, $max);
     }
 
     /**
