@@ -104,7 +104,7 @@ Details and the review checklist: [SECURITY.md](SECURITY.md). Found a vulnerabil
 
 ## For developers
 
-- [PROTOCOL.md](PROTOCOL.md): the signed protocol between the plugin and sudemi (connection, catalogue, check-in, orders, statistics).
+- [Plugin protocol](https://sudemi.com/docs/en/plugin-protocol): the signed protocol between the plugin and sudemi (connection, catalogue, check-in, orders, statistics), published on the sudemi website in 12 languages.
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 - Tests are in `tests/`.
 - `.addons/`: the PrestaShop Addons product sheet text and screenshots (not in the module zip).
