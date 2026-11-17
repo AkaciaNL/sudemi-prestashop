@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.3
+
+- **Fix: a buyer's name with letters such as "ë", "Ł" or "ó" is split into first and last name
+  correctly.** The split at the last space counted bytes instead of characters, so with such
+  letters before it the first name took part of the surname and the surname lost its first
+  letters (for example "Wiśniewska" became "niewska"). Nothing else changes.
+
 ## 1.4.2
 
 - **Fix: a buyer's name or address with characters PrestaShop does not accept no longer stops

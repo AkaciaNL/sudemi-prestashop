@@ -876,13 +876,7 @@ class SudemiOrders
         }
 
         $to = $body['ship_to'];
-        $name = isset($to['recipient_name']) ? trim((string) $to['recipient_name']) : '';
-        // PrestaShop wants the name split, and a recipient line is not reliably "first last" in
-        // every locale. Everything before the last space is the first name: wrong for some
-        // names, and never loses part of one.
-        $space = strrpos($name, ' ');
-        $first = $space === false ? $name : Tools::substr($name, 0, $space);
-        $last = $space === false ? '-' : Tools::substr($name, $space + 1);
+        list($first, $last) = self::splitName(isset($to['recipient_name']) ? (string) $to['recipient_name'] : '');
 
         $address = new Address();
         $address->id_customer = (int) $order->id_customer;
@@ -919,6 +913,29 @@ class SudemiOrders
         // shop issues the buyer no invoice and has no reason to hold more of their data.
         $order->id_address_invoice = (int) $address->id;
         $order->update();
+    }
+
+    /**
+     * The recipient line as PrestaShop's first and last name.
+     *
+     * PrestaShop wants the name split, and a recipient line is not reliably "first last" in every
+     * locale. Everything before the last space is the first name: wrong for some names, and never
+     * loses part of one. Counted in characters, not bytes: a name with "ë" or "Ł" before the last
+     * space was split a few characters too late (1.4.2 and earlier).
+     *
+     * @param string $name
+     *
+     * @return array{0: string, 1: string} first name, last name ("-" when there is only one word)
+     */
+    public static function splitName($name)
+    {
+        $name = trim((string) preg_replace('/\s+/u', ' ', (string) $name));
+        $space = mb_strrpos($name, ' ', 0, 'UTF-8');
+        if ($space === false) {
+            return [$name, '-'];
+        }
+
+        return [mb_substr($name, 0, $space, 'UTF-8'), mb_substr($name, $space + 1, null, 'UTF-8')];
     }
 
     /**

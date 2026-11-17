@@ -51,5 +51,15 @@ check( 'city with a symbol is cleaned', 'Köln' === SudemiOrders::fitField( 'Kö
 check( 'phone with letters is cleaned', '+49 30 1234' === SudemiOrders::fitField( '+49 30 1234 ext', 'isPhoneNumber', '/[^+0-9. ()\/-]/', 32 ) );
 check( 'fields are cut to the column size', 64 === mb_strlen( SudemiOrders::fitField( str_repeat( 'a', 100 ), 'isCityName', '/[!<>;?=+@#"°{}_$%]/u', 64 ) ) );
 
+// 1.4.3: the name is split at the last space counted in characters. Before, the byte position of
+// the space was used as a character position, so letters such as "ë" and "Ł" moved the split.
+$awkward = "Zoë O'Brien-Łukasz & Co. 2, Åsa van der Wiśniewska-Kowalczykówna";
+list( $first, $last ) = SudemiOrders::splitName( $awkward );
+check( 'split at the last space with non-ASCII letters before it', "Zoë O'Brien-Łukasz & Co. 2, Åsa van der" === $first && 'Wiśniewska-Kowalczykówna' === $last );
+check( 'the cleaned first name keeps every letter', "Zoë O'Brien-Łukasz & Co. Åsa van der" === SudemiOrders::fitName( $first ) );
+check( 'one word: last name "-"', array( 'Madonna', '-' ) === SudemiOrders::splitName( ' Madonna ' ) );
+check( 'Hebrew and Chinese names split by characters', array( 'שרה', 'כהן' ) === SudemiOrders::splitName( 'שרה כהן' ) && array( '王', '小明' ) === SudemiOrders::splitName( '王 小明' ) );
+check( 'runs of spaces count as one', array( 'Anna Maria', 'Łącka' ) === SudemiOrders::splitName( "Anna  Maria \t Łącka" ) );
+
 echo $failures ? "\n$failures FAILED\n" : "\nALL PASS\n";
 exit( $failures ? 1 : 0 );
