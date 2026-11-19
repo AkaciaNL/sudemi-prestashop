@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'Kupuj
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'Twój sklep jest wstrzymany w sudemi, dopóki sprawdzamy ograniczenie nałożone przez dostawcę płatności';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'Twoje produkty na razie nie są wyświetlane. Napiszemy Ci, czego potrzeba.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'Skontaktuj się ze wsparciem';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'Przyjmuj zwroty spersonalizowanych produktów';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'Wyłączone (domyślnie): produktu wykonanego z tekstem wpisanym przez kupującego (imię, grawer) nie można zwrócić, na co pozwala prawo; kupujący dowiadują się o tym przed zapłatą. Włączone: kupujący mogą go zwrócić jak każdy inny produkt.';

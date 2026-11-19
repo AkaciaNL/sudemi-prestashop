@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'Los c
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'Tu tienda está pausada en sudemi mientras revisamos una restricción del proveedor de pagos';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'Tus productos no se muestran por ahora. Te escribimos qué hace falta.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'Contactar con soporte';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'Aceptar devoluciones de artículos personalizados';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'Desactivado (por defecto): un artículo hecho con un texto que escribió el comprador (un nombre, un grabado) no se puede devolver, como permite la ley; se avisa al comprador antes de pagar. Activado: los compradores pueden devolverlo como cualquier otro artículo.';

@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'По�
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'Ваш магазин приостановлен в sudemi, пока мы проверяем ограничение платёжного сервиса';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'Ваши товары пока не показываются. Мы напишем вам, что нужно.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'Связаться с поддержкой';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'Принимать возврат персонализированных товаров';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'Выключено (по умолчанию): товар, сделанный с текстом, который ввёл покупатель (имя, гравировка), нельзя вернуть, как разрешает закон; покупателям сообщают об этом до оплаты. Включено: покупатели могут вернуть его, как любой другой товар.';

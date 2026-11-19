@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'Alıc
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'Bir ödeme kuruluşu kısıtlamasını incelerken mağazanız sudemi\'de duraklatıldı';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'Ürünleriniz şimdilik gösterilmiyor. Neyin gerektiğini size e-postayla bildiririz.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'Destekle iletişime geçin';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'Kişiselleştirilmiş ürünlerin iadesini kabul et';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'Kapalı (varsayılan): alıcının yazdığı bir metinle (bir isim, bir gravür) yapılan ürün, yasanın izin verdiği gibi iade edilemez; alıcılara ödemeden önce söylenir. Açık: alıcılar bunu diğer ürünler gibi iade edebilir.';

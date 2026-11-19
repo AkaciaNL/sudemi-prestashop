@@ -96,6 +96,7 @@ class Sudemi extends Module
             && $this->registerHook('actionCarrierUpdate')
             && $this->registerHook('actionObjectCarrierUpdateAfter')
             && SudemiWithdrawal::installTable()
+            && SudemiWithdrawal::installReturnableTable()
             && $this->registerWithdrawalHooks()
             && $this->registerOrderPageHooks()
             && $this->registerCombinationHooks()
@@ -252,6 +253,7 @@ class Sudemi extends Module
             && $this->registerHook('actionCarrierUpdate')
             && $this->registerHook('actionObjectCarrierUpdateAfter')
             && $this->registerWithdrawalHooks()
+            && SudemiWithdrawal::installReturnableTable()
             && $this->registerOrderPageHooks()
             && $this->registerCombinationHooks()
             && $this->registerSpecificPriceHooks()
@@ -438,6 +440,13 @@ class Sudemi extends Module
             'translation_domain' => false,
             'choice_translation_domain' => false,
         ]);
+        $tab->add(SudemiWithdrawal::FIELD_RETURNABLE, Symfony\Component\Form\Extension\Core\Type\CheckboxType::class, [
+            'label' => $this->l('Accept returns of personalised items'),
+            'help' => $this->l('Off (default): an item made with a text the buyer typed (a name, an engraving) cannot be returned, as the law allows; buyers are told before paying. On: buyers may return it like any other item.'),
+            'data' => !empty($params['id']) && SudemiWithdrawal::isReturnable((int) $params['id']),
+            'required' => false,
+            'translation_domain' => false,
+        ]);
     }
 
     /**
@@ -451,7 +460,12 @@ class Sudemi extends Module
         $data = isset($params['form_data']) && is_array($params['form_data']) ? $params['form_data'] : [];
         foreach ($data as $tab) {
             if (is_array($tab) && array_key_exists(SudemiWithdrawal::FIELD, $tab)) {
-                if (SudemiWithdrawal::set($productId, $tab[SudemiWithdrawal::FIELD])) {
+                $changed = SudemiWithdrawal::set($productId, $tab[SudemiWithdrawal::FIELD]);
+                // "Accept returns of personalised items" sits in the same tab (owner decision 2).
+                if (array_key_exists(SudemiWithdrawal::FIELD_RETURNABLE, $tab)) {
+                    $changed = SudemiWithdrawal::setReturnable($productId, !empty($tab[SudemiWithdrawal::FIELD_RETURNABLE])) || $changed;
+                }
+                if ($changed) {
                     SudemiSync::request();
                 }
 

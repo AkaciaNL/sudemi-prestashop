@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'Käuf
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'Ihr Shop ist auf sudemi pausiert, während wir eine Einschränkung des Zahlungsdienstleisters prüfen';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'Ihre Produkte werden vorerst nicht gezeigt. Wir schreiben Ihnen per E-Mail, was nötig ist.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'Support kontaktieren';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'Rücksendungen personalisierter Artikel annehmen';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'Aus (Standard): Ein Artikel mit einem vom Käufer eingegebenen Text (ein Name, eine Gravur) kann, wie gesetzlich erlaubt, nicht zurückgegeben werden; Käufer erfahren das vor dem Bezahlen. An: Käufer dürfen ihn wie jeden anderen Artikel zurückgeben.';

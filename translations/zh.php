@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = '买�
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = '我们正在审核支付服务商的限制，您的店铺在 sudemi 上已暂停';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = '您的商品暂时不展示。我们会通过电子邮件告诉您需要什么。';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = '联系客服';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = '接受个性化商品的退货';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = '关闭（默认）：按法律允许，带有买家输入文字（名字、刻字）的商品不可退货；买家在付款前会被告知。开启：买家可以像其他商品一样退货。';

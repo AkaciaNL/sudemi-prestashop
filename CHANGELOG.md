@@ -36,6 +36,10 @@
   the condition (new, used, refurbished). A price update never ends a running sale.
 - **Fix: a product you allow to be ordered without stock is no longer declined** when its stock
   is 0; the order is taken, as in your own shop.
+- **New per-product setting "Accept returns of personalised items"** (product page, next to the
+  right of withdrawal; off by default). An item made with a text the buyer typed is not returnable
+  by default on sudemi, as EU law allows, and buyers are told before paying; switch it on to accept
+  returns of such items on that product.
 - **Fix (money): only prices every buyer gets are sent.** A sale or discount for a customer
   group (for example registered customers only), a single customer or another country was sent
   as everyone's price. Now only specific prices for all groups or the guest group, any or the

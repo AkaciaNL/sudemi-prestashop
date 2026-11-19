@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'Les a
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'Votre boutique est en pause sur sudemi pendant que nous examinons une restriction du prestataire de paiement';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'Vos produits ne sont pas affichés pour le moment. Nous vous écrivons ce qu\'il faut.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'Contacter le support';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'Accepter les retours des articles personnalisés';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'Désactivé (par défaut) : un article fait avec un texte saisi par l\'acheteur (un nom, une gravure) ne peut pas être retourné, comme la loi le permet ; les acheteurs en sont informés avant de payer. Activé : les acheteurs peuvent le retourner comme tout autre article.';

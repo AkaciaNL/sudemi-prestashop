@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'يد�
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'متجرك متوقف مؤقتًا على sudemi ريثما نراجع قيدًا فرضه مزوّد الدفع';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'لا تُعرض منتجاتك حاليًا. سنراسلك بما هو مطلوب.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'تواصل مع الدعم';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'قبول إرجاع المنتجات المخصصة';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'إيقاف (افتراضي): لا يمكن إرجاع منتج مصنوع بنص كتبه المشتري (اسم أو نقش)، كما يسمح القانون؛ ويُبلَّغ المشتري بذلك قبل الدفع. تشغيل: يمكن للمشترين إرجاعه مثل أي منتج آخر.';

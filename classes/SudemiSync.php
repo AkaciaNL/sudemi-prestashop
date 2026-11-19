@@ -202,6 +202,8 @@ class SudemiSync
             'started' => time(),
         ];
         self::saveState($state);
+        // The per-product returns setting's table (1.4.4), also before a back-office page ran setup.
+        SudemiWithdrawal::installReturnableTable();
         self::pushShop();
         self::pushCategories();
 
@@ -978,6 +980,10 @@ class SudemiSync
         $payload = array_merge($payload, SudemiProductData::forListing($product, 0, $payload['quantity'], $payload['priceMinor'], function ($price) {
             return self::minor($price);
         }));
+
+        // The shop accepts returns of personalised items of this product (owner decision 2):
+        // false is sent too, so switching it off reaches sudemi. Combinations inherit it.
+        $payload['personalisationReturnable'] = SudemiWithdrawal::isReturnable($productId);
 
         // Excluded from the right of withdrawal (EU 2011/83 art. 16), with the reason; omitted when
         // the normal right applies. Combinations are built from this payload, so they inherit it.

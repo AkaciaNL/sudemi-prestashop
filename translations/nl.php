@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'Koper
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'Je winkel is gepauzeerd op sudemi terwijl wij een beperking van de betaaldienst bekijken';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'Je producten worden voorlopig niet getoond. We mailen je wat er nodig is.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'Contact met support';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'Retouren van gepersonaliseerde artikelen accepteren';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'Uit (standaard): een artikel gemaakt met een tekst die de koper typte (een naam, een gravure) kan niet worden geretourneerd, zoals de wet toestaat; kopers horen dit voor het betalen. Aan: kopers mogen het retourneren zoals elk ander artikel.';

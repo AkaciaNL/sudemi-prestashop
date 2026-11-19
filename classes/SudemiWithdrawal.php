@@ -117,8 +117,57 @@ class SudemiWithdrawal
         return true;
     }
 
+    /**
+     * Owner decision 2 (2026-11-19): an item made with a text the buyer typed is not returnable
+     * by default (EU 2011/83 art. 16(c)). A shop may accept returns of it anyway, per product
+     * ("Accept returns of personalised items", off by default): a row here means on.
+     */
+    public const FIELD_RETURNABLE = 'sudemi_personalisation_returnable';
+
+    public static function installReturnableTable()
+    {
+        return Db::getInstance()->execute(
+            'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'sudemi_product_returnable` (
+                `id_product` INT UNSIGNED NOT NULL,
+                `date_upd` DATETIME NOT NULL,
+                PRIMARY KEY (`id_product`)
+            ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4'
+        );
+    }
+
+    /** Whether the shop accepts returns of this product when personalised. */
+    public static function isReturnable($productId)
+    {
+        try {
+            return (bool) Db::getInstance()->getValue(
+                'SELECT 1 FROM `' . _DB_PREFIX_ . 'sudemi_product_returnable` WHERE id_product = ' . (int) $productId
+            );
+        } catch (Exception $e) {
+            return false; // the table comes with the version's setup; until then: off
+        }
+    }
+
+    /** @return bool whether the stored value changed */
+    public static function setReturnable($productId, $on)
+    {
+        $productId = (int) $productId;
+        $on = (bool) $on;
+        if ($productId <= 0 || self::isReturnable($productId) === $on) {
+            return false;
+        }
+        self::installReturnableTable();
+        if ($on) {
+            Db::getInstance()->execute('REPLACE INTO `' . _DB_PREFIX_ . 'sudemi_product_returnable` (id_product, date_upd) VALUES (' . $productId . ', NOW())');
+        } else {
+            Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'sudemi_product_returnable` WHERE id_product = ' . $productId);
+        }
+
+        return true;
+    }
+
     public static function forget($productId)
     {
+        Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'sudemi_product_returnable` WHERE id_product = ' . (int) $productId);
         Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'sudemi_product` WHERE id_product = ' . (int) $productId);
     }
 }

@@ -456,3 +456,5 @@ $_MODULE['<{sudemi}prestashop>sudemi_d48f2918df6ed118db4b7cfb50792716'] = 'Gli a
 $_MODULE['<{sudemi}prestashop>sudemi_dbfc106bc7d731e09d4045c8607b31df'] = 'Il tuo negozio è in pausa su sudemi mentre verifichiamo una limitazione del fornitore di pagamenti';
 $_MODULE['<{sudemi}prestashop>sudemi_bdc813fb1effb6bea86f15d3eff94666'] = 'Per ora i tuoi prodotti non vengono mostrati. Ti scriviamo cosa serve.';
 $_MODULE['<{sudemi}prestashop>sudemi_ad119d5ea30f6c26b58e0af5bc43c9fe'] = 'Contatta l\'assistenza';
+$_MODULE['<{sudemi}prestashop>sudemi_f83213ec1b90c038ad7fa4de0299c6aa'] = 'Accetta i resi degli articoli personalizzati';
+$_MODULE['<{sudemi}prestashop>sudemi_ad8947b3ee4c490f8a33034ad24e11ad'] = 'Disattivato (predefinito): un articolo realizzato con un testo scritto dall\'acquirente (un nome, un\'incisione) non può essere reso, come consente la legge; gli acquirenti lo sanno prima di pagare. Attivato: gli acquirenti possono renderlo come qualsiasi altro articolo.';
