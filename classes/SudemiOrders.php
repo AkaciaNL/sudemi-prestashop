@@ -1054,14 +1054,30 @@ class SudemiOrders
                     isset($line['title']) ? (string) $line['title'] : 'an item'
                 );
             }
+            // The title sudemi has for the line: the product was loaded without a language,
+            // so its name is one entry per language ("Array" in the reason buyers read).
+            $name = isset($line['title']) && (string) $line['title'] !== '' ? (string) $line['title']
+                : (is_array($product->name) ? (string) reset($product->name) : (string) $product->name);
+            // The exact combination the buyer chose, still a combination of this product.
+            $minimal = (int) $product->minimal_quantity;
+            if ($attributeId) {
+                $combination = new Combination((int) $attributeId);
+                if (!Validate::isLoadedObject($combination) || (int) $combination->id_product !== (int) $productId) {
+                    return sprintf('"%s" is no longer sold here', $name);
+                }
+                $minimal = (int) $combination->minimal_quantity;
+            }
             $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
             if ((int) StockAvailable::getQuantityAvailableByProduct($productId, $attributeId ?: null) < $quantity) {
-                // The title sudemi has for the line: the product was loaded without a language,
-                // so its name is one entry per language ("Array" in the reason buyers read).
-                $name = isset($line['title']) && (string) $line['title'] !== '' ? (string) $line['title']
-                    : (is_array($product->name) ? (string) reset($product->name) : (string) $product->name);
-
                 return sprintf('"%s" is out of stock', $name);
+            }
+            if ($minimal > 1 && $quantity < $minimal) {
+                return sprintf('"%s" is sold in quantities of at least %d', $name, $minimal);
+            }
+            // A text the buyer has to type (a name to print) that did not come with the order.
+            $missing = SudemiVariants::missing(SudemiSync::personalisationFor($productId, $attributeId), SudemiVariants::typed($line));
+            if ($missing !== null) {
+                return sprintf('the text "%s" the buyer has to type for "%s" is missing', $missing, $name);
             }
         }
 
@@ -1160,16 +1176,28 @@ class SudemiOrders
         // the order is priced from the catalogue as before.
         $paid = self::paidAmounts($pending);
         $paidByProduct = [];
+        $lineKeys = [];
         foreach ($pending['lines'] as $index => $line) {
             list($productId, $attributeId) = SudemiSync::parseExternalId(isset($line['external_id']) ? $line['external_id'] : '0');
             $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
-            if (!$cart->updateQty($quantity, $productId, $attributeId ?: null)) {
+            // The text the buyer typed (a name to print), as PrestaShop's own checkout stores a
+            // customization: on the cart line, so the order line and the order page show it.
+            $customizationId = self::addCustomization($cart, $productId, $attributeId, $address, SudemiVariants::typed($line));
+            if ($customizationId === null) {
                 $cart->delete();
 
                 return null;
             }
+            // true, or false / -1 (below the minimum quantity, out of stock): a line PrestaShop did
+            // not add must never leave an order with a line missing.
+            if ($cart->updateQty($quantity, $productId, $attributeId ?: null, $customizationId ?: false, 'up', (int) $address->id) !== true) {
+                $cart->delete();
+
+                return null;
+            }
+            $lineKeys[(int) $productId . '-' . (int) $attributeId . '-' . (int) $customizationId] = true;
             if ($paid !== null) {
-                $key = (int) $productId . '-' . (int) $attributeId;
+                $key = (int) $productId . '-' . (int) $attributeId . '-' . (int) $customizationId;
                 if (!isset($paidByProduct[$key])) {
                     $paidByProduct[$key] = 0;
                 }
@@ -1177,7 +1205,16 @@ class SudemiOrders
             }
         }
 
-        $products = $cart->getProducts();
+        $products = $cart->getProducts(true);
+        $inCart = [];
+        foreach ($products as $row) {
+            $inCart[(int) $row['id_product'] . '-' . (int) $row['id_product_attribute'] . '-' . (int) (isset($row['id_customization']) ? $row['id_customization'] : 0)] = true;
+        }
+        if (array_diff_key($lineKeys, $inCart)) {
+            $cart->delete();
+
+            return null;
+        }
         if ($paid !== null) {
             // The buyer's price wins over today's catalogue price: it may have changed since the
             // last sync, and the shop's order has to say what was actually paid. The VAT inside
@@ -1185,7 +1222,7 @@ class SudemiOrders
             $goodsIncl = 0;
             $goodsExcl = 0;
             foreach ($products as &$row) {
-                $key = (int) $row['id_product'] . '-' . (int) $row['id_product_attribute'];
+                $key = (int) $row['id_product'] . '-' . (int) $row['id_product_attribute'] . '-' . (int) (isset($row['id_customization']) ? $row['id_customization'] : 0);
                 $qty = max(1, (int) $row['cart_quantity']);
                 if (!isset($paidByProduct[$key])) {
                     $cart->delete();
@@ -1291,6 +1328,43 @@ class SudemiOrders
         self::remember($order->id, $sudemiId, $code);
 
         return $order;
+    }
+
+    /**
+     * The customization holding the texts the buyer typed for one cart line: 0 when there are
+     * none, null when PrestaShop refused it. Written the way PrestaShop's own checkout writes a
+     * text customization (a customization row for the cart line, one customized_data row per
+     * field), so the order page and the shop's documents show it as usual.
+     *
+     * @param array $typed id_customization_field => text (SudemiVariants::typed)
+     */
+    private static function addCustomization(Cart $cart, $productId, $attributeId, Address $address, array $typed)
+    {
+        if (empty($typed)) {
+            return 0;
+        }
+        $customization = new Customization();
+        $customization->id_cart = (int) $cart->id;
+        $customization->id_product = (int) $productId;
+        $customization->id_product_attribute = (int) $attributeId;
+        $customization->id_address_delivery = (int) $address->id;
+        $customization->quantity = 0;
+        $customization->quantity_refunded = 0;
+        $customization->quantity_returned = 0;
+        $customization->in_cart = false;
+        if (!$customization->add()) {
+            return null;
+        }
+        foreach ($typed as $fieldId => $text) {
+            Db::getInstance()->insert('customized_data', [
+                'id_customization' => (int) $customization->id,
+                'type' => (int) Product::CUSTOMIZE_TEXTFIELD,
+                'index' => (int) $fieldId,
+                'value' => pSQL($text),
+            ]);
+        }
+
+        return (int) $customization->id;
     }
 
     /**

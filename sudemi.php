@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.4.3');
+define('SUDEMI_VERSION', '1.4.4');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -24,6 +24,7 @@ require_once __DIR__ . '/classes/SudemiQueue.php';
 require_once __DIR__ . '/classes/SudemiShipping.php';
 require_once __DIR__ . '/classes/SudemiWithdrawal.php';
 require_once __DIR__ . '/classes/SudemiCurrency.php';
+require_once __DIR__ . '/classes/SudemiVariants.php';
 require_once __DIR__ . '/classes/SudemiSync.php';
 require_once __DIR__ . '/classes/SudemiClaims.php';
 require_once __DIR__ . '/classes/SudemiOrders.php';
@@ -97,6 +98,7 @@ class Sudemi extends Module
             && $this->registerWithdrawalHooks()
             && $this->registerOrderPageHooks()
             && $this->registerCombinationHooks()
+            && $this->registerSpecificPriceHooks()
             && $this->registerTrackingHooks()
             && $this->installTabs()
             && SudemiOrders::ensureSchema()
@@ -251,6 +253,7 @@ class Sudemi extends Module
             && $this->registerWithdrawalHooks()
             && $this->registerOrderPageHooks()
             && $this->registerCombinationHooks()
+            && $this->registerSpecificPriceHooks()
             && $this->registerTrackingHooks();
         if ($ok) {
             Configuration::updateValue(self::CONF_SETUP, SUDEMI_VERSION);
@@ -299,6 +302,46 @@ class Sudemi extends Module
             SudemiSync::noteRemoval();
         }
         SudemiSync::pushDelta((int) $combination->id_product);
+    }
+
+    /**
+     * A sale or a discounted price (a specific price) added, changed or removed (1.4.4): the
+     * product's listings go to sudemi with the new prices. One for every product (id_product 0)
+     * asks for a full sync. Registered on existing installs by ensureAdminSetup().
+     */
+    public function registerSpecificPriceHooks()
+    {
+        return $this->registerHook('actionObjectSpecificPriceAddAfter')
+            && $this->registerHook('actionObjectSpecificPriceUpdateAfter')
+            && $this->registerHook('actionObjectSpecificPriceDeleteAfter');
+    }
+
+    public function hookActionObjectSpecificPriceAddAfter($params)
+    {
+        $this->specificPriceChanged($params);
+    }
+
+    public function hookActionObjectSpecificPriceUpdateAfter($params)
+    {
+        $this->specificPriceChanged($params);
+    }
+
+    public function hookActionObjectSpecificPriceDeleteAfter($params)
+    {
+        $this->specificPriceChanged($params);
+    }
+
+    private function specificPriceChanged($params)
+    {
+        $price = isset($params['object']) ? $params['object'] : null;
+        if (!is_object($price) || !SudemiClient::isConnected()) {
+            return;
+        }
+        if ((int) $price->id_product > 0) {
+            SudemiSync::pushDelta((int) $price->id_product);
+        } else {
+            SudemiSync::request();
+        }
     }
 
     /**

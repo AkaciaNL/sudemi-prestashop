@@ -686,7 +686,9 @@ class SudemiSync
     /**
      * The listings one product becomes: itself, or one per combination (size, colour...), because
      * a buyer buys a combination, never the product without one. Each has its own price, stock,
-     * reference, barcode and the combination's options in its title.
+     * reference, barcode, weight, photos and the combination's options (by name, in the shop's
+     * language), and all share the product's id as their variant group, so sudemi shows them as
+     * one product with a choice.
      */
     private static function listings($productId, $languageId)
     {
@@ -703,32 +705,49 @@ class SudemiSync
         foreach ($rows as $row) {
             $byCombination[(int) $row['id_product_attribute']][] = $row;
         }
+        $groups = self::attributeGroups($languageId, $rows);
+        $fields = self::customizationFields($product, $languageId);
         $link = Context::getContext()->link;
         // Photos the shop assigned to each combination (the ones its storefront shows for it).
         $combinationImages = $product->getCombinationImages($languageId);
+        // Shipping depends on the price (free shipping above an amount), not on the combination.
+        $shippingByPrice = [];
         $listings = [];
         foreach ($byCombination as $paid => $attributes) {
+            $attributes = SudemiVariants::sorted($attributes, $groups);
             $first = $attributes[0];
+            $variant = SudemiVariants::attributes($attributes, $groups);
             $item = $base;
             $item['externalId'] = self::externalId($productId, $paid);
+            $item['itemGroupId'] = (string) $productId;
+            $item['variantAttributes'] = $variant;
             $item['title'] = $base['title'] . ' - ' . implode(', ', array_map(function ($a) {
-                return (string) $a['attribute_name'];
-            }, $attributes));
+                return $a['value'];
+            }, $variant));
             $item['sku'] = ((string) $first['reference']) !== '' ? (string) $first['reference'] : $base['sku'];
             $gtin = ((string) $first['ean13']) !== '' ? (string) $first['ean13'] : (((string) $first['upc']) !== '' ? (string) $first['upc'] : null);
             // A combination is a different item from its siblings: never inherit the product's barcode.
             $item['gtin'] = $gtin;
+            if (isset($first['mpn']) && (string) $first['mpn'] !== '') {
+                $item['mpn'] = (string) $first['mpn'];
+            }
             $price = Product::getPriceStatic($productId, true, $paid);
             $item['priceMinor'] = self::minor($price);
             $quantity = (int) StockAvailable::getQuantityAvailableByProduct($productId, $paid);
             $item['quantity'] = $quantity;
             $item['inStock'] = $quantity > 0;
             $item['weightGrams'] = (int) round(((float) $product->weight + (float) $first['weight']) * 1000);
+            $item['minQuantity'] = isset($first['minimal_quantity']) ? max(1, (int) $first['minimal_quantity']) : $base['minQuantity'];
             $item['url'] = $link->getProductLink($product, null, null, null, null, null, $paid);
             $item['specs'] = array_merge(array_map(function ($a) {
-                return ['name' => (string) $a['group_name'], 'values' => [(string) $a['attribute_name']]];
-            }, $attributes), $base['specs']);
-            $item['shipping'] = SudemiShipping::ratesFor($product, $price);
+                return ['name' => $a['name'], 'values' => [$a['value']]];
+            }, $variant), $base['specs']);
+            $item['personalisation'] = SudemiVariants::personalisation($fields, $attributes, $groups);
+            $priceKey = (string) $item['priceMinor'];
+            if (!isset($shippingByPrice[$priceKey])) {
+                $shippingByPrice[$priceKey] = SudemiShipping::ratesFor($product, $price);
+            }
+            $item['shipping'] = $shippingByPrice[$priceKey];
             // A combination with its own photos shows only those (a black pot is not shown with
             // the white pot's photo); one without keeps all of the product's photos.
             if (is_array($combinationImages) && !empty($combinationImages[$paid])) {
@@ -742,6 +761,82 @@ class SudemiSync
         }
 
         return $listings;
+    }
+
+    /**
+     * The attribute groups of these combination rows: id => name, public name (as the
+     * storefront shows it), position, and the first value this product uses in it (the lowest
+     * position: "No" of a "Name to print: No / Yes" group).
+     */
+    private static function attributeGroups($languageId, array $rows)
+    {
+        $groups = [];
+        foreach (AttributeGroup::getAttributesGroups($languageId) as $group) {
+            $groups[(int) $group['id_attribute_group']] = [
+                'name' => (string) $group['name'],
+                'public_name' => (string) $group['public_name'],
+                'position' => (int) $group['position'],
+            ];
+        }
+        $ids = [];
+        foreach ($rows as $row) {
+            $ids[(int) $row['id_attribute']] = (int) $row['id_attribute_group'];
+        }
+        if (!empty($ids)) {
+            $positions = Db::getInstance()->executeS(
+                'SELECT id_attribute, position FROM ' . _DB_PREFIX_ . 'attribute WHERE id_attribute IN (' . implode(',', array_map('intval', array_keys($ids))) . ')'
+            );
+            $best = [];
+            foreach (is_array($positions) ? $positions : [] as $p) {
+                $g = $ids[(int) $p['id_attribute']];
+                if (!isset($best[$g]) || (int) $p['position'] < $best[$g][1]
+                    || ((int) $p['position'] === $best[$g][1] && (int) $p['id_attribute'] < $best[$g][0])) {
+                    $best[$g] = [(int) $p['id_attribute'], (int) $p['position']];
+                }
+            }
+            foreach ($best as $g => $pick) {
+                $groups[$g]['first'] = $pick[0];
+            }
+        }
+
+        return $groups;
+    }
+
+    /** The product's customization fields (text and file), in the shop's language. */
+    public static function customizationFields(Product $product, $languageId)
+    {
+        if (empty($product->customizable)) {
+            return [];
+        }
+        $fields = $product->getCustomizationFields((int) $languageId);
+
+        return is_array($fields) ? array_values(array_filter($fields, 'is_array')) : [];
+    }
+
+    /**
+     * What the listing behind an external id asks the buyer to type (see SudemiVariants), for
+     * an order coming back.
+     */
+    public static function personalisationFor($productId, $attributeId)
+    {
+        $languageId = (int) Configuration::get('PS_LANG_DEFAULT');
+        $product = new Product((int) $productId, false, $languageId);
+        if (!Validate::isLoadedObject($product)) {
+            return [];
+        }
+        $fields = self::customizationFields($product, $languageId);
+        if (empty($fields)) {
+            return [];
+        }
+        // The groups' first values come from all the product's combinations, the rows from this one.
+        $all = $attributeId ? $product->getAttributeCombinations($languageId) : [];
+        $all = is_array($all) ? $all : [];
+        $rows = array_values(array_filter($all, function ($row) use ($attributeId) {
+            return (int) $row['id_product_attribute'] === (int) $attributeId;
+        }));
+        $groups = self::attributeGroups($languageId, $all);
+
+        return SudemiVariants::personalisation($fields, SudemiVariants::sorted($rows, $groups), $groups);
     }
 
     private static function pushShop()
@@ -801,6 +896,15 @@ class SudemiSync
         if (!Validate::isLoadedObject($product) || !$product->active) {
             return null;
         }
+        // Not orderable in the shop itself ("Available for order" off, a catalogue-only product).
+        if (isset($product->available_for_order) && !$product->available_for_order) {
+            return null;
+        }
+        // A required file upload (a photo to print) cannot be asked for through sudemi.
+        $fields = self::customizationFields($product, $languageId);
+        if (!SudemiVariants::sellable($fields)) {
+            return null;
+        }
 
         $link = Context::getContext()->link;
 
@@ -831,8 +935,15 @@ class SudemiSync
             'url' => $link->getProductLink($product),
             'priceMinor' => self::minor(Product::getPriceStatic($productId, true)),
             'currency' => self::currency(),
-            'inStock' => (bool) (StockAvailable::getQuantityAvailableByProduct($productId) > 0),
-            'quantity' => (int) StockAvailable::getQuantityAvailableByProduct($productId),
+            'inStock' => self::quantityOf($productId) > 0,
+            'quantity' => self::quantityOf($productId),
+            // Combinations (variants) override these three; see listings().
+            'itemGroupId' => null,
+            'variantAttributes' => [],
+            // A text the buyer types: the product's text customization fields (SudemiVariants).
+            'personalisation' => SudemiVariants::personalisation($fields, [], []),
+            // The smallest quantity the shop sells in one order (PrestaShop's minimum quantity).
+            'minQuantity' => max(1, (int) $product->minimal_quantity),
             'weightGrams' => (int) round((float) $product->weight * 1000),
             'categoryExternalIds' => $categories,
             'images' => $images,
@@ -847,6 +958,19 @@ class SudemiSync
         // Excluded from the right of withdrawal (EU 2011/83 art. 16), with the reason; omitted when
         // the normal right applies. Combinations are built from this payload, so they inherit it.
         return SudemiWithdrawal::apply($payload, SudemiWithdrawal::get($productId));
+    }
+
+    /**
+     * What a product without combinations has in stock. A pack whose stock follows its items
+     * has as many as its scarcest item allows (PrestaShop's own Pack::getQuantity).
+     */
+    private static function quantityOf($productId)
+    {
+        if (class_exists('Pack') && Pack::isPack((int) $productId)) {
+            return (int) Pack::getQuantity((int) $productId);
+        }
+
+        return (int) StockAvailable::getQuantityAvailableByProduct($productId);
     }
 
     /**

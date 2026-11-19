@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.4.4
+
+- **Combinations show to buyers as one product with a choice.** Every combination now sends the
+  product's id as its variant group and its options by name (for example Size: XL, Colour: Red,
+  as your storefront names the attribute groups), so AI assistants show the product once with its
+  sizes and colours to choose from and pick exactly the combination the buyer asked for, at its
+  own price. A combination's title lists its options in the order of your attribute groups (it
+  could change from one sync to the next before).
+- **A text the buyer types is asked on sudemi too.** A text customization field (for example
+  "Name to print") is sent with the product, and the text the buyer typed is written into the
+  order as a customization, exactly where PrestaShop's own checkout puts it (order page,
+  documents). PrestaShop has no price for a customization, so to charge for it add an attribute
+  group with the same name as the field ("Name to print: No / Yes", Yes with a price impact): the
+  text is then asked, required, on the Yes combinations only. A product with a required file
+  upload is not listed (sudemi cannot ask for a file). An order without a required text is
+  declined, so nothing is made without it.
+- **Fix: an order line PrestaShop did not add no longer leaves the order without it.** Adding a
+  line to the cart below the product's minimum quantity returned -1, which was taken as success,
+  and the order was written without that line. Now the order is not written, and an order below
+  the minimum quantity is declined with the reason. The minimum quantity is also sent with each
+  listing.
+- **Fix: a combination that no longer belongs to the product is declined** ("no longer sold
+  here") instead of being looked up as stock only.
+- Products switched to "not available for order" are no longer listed.
+- Packs whose stock follows their items send as many as the scarcest item allows.
+- A sale or discounted price (a specific price) added, changed or removed now sends the
+  product's new prices to sudemi right away (one for all products asks for a full sync).
+- Delivery prices are worked out once per price for a product with many combinations (100 or
+  more), so the sync of such a product stays quick.
+
 ## 1.4.3
 
 - **Fix: a buyer's name with letters such as "ë", "Ł" or "ó" is split into first and last name

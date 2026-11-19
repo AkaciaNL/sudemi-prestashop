@@ -8,7 +8,7 @@ The plugin is free. There is no monthly fee.
 
 ## What the plugin does
 
-- **Lists your catalogue on sudemi**: categories, products with their descriptions and specifications, photos, prices, stock and delivery prices. Combinations: every combination is its own listing with its own price and stock, and with its own photos when you assigned photos to it.
+- **Lists your catalogue on sudemi**: categories, products with their descriptions and specifications, photos, prices, stock and delivery prices. Combinations: every combination is its own listing with its own price and stock, and with its own photos when you assigned photos to it, shown to buyers as one product with a choice. A text customization field (a name to print) is asked on sudemi too and written into the order as a customization.
 - **Keeps it current**: a price or stock change is sent the moment you save it, so sudemi and your shop agree within seconds, not after the next import.
 - **Checks in every few minutes**, so sudemi only shows your products while your shop is online and its prices are current.
 - **Brings sudemi into your PrestaShop back office**: statistics, the products as sudemi holds them, orders, delivery prices, payouts, your shop profile and support, under **sudemi** in the back office sidebar (Sell section).
