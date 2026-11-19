@@ -26,6 +26,7 @@ require_once __DIR__ . '/classes/SudemiWithdrawal.php';
 require_once __DIR__ . '/classes/SudemiCurrency.php';
 require_once __DIR__ . '/classes/SudemiVariants.php';
 require_once __DIR__ . '/classes/SudemiProductData.php';
+require_once __DIR__ . '/classes/SudemiIssues.php';
 require_once __DIR__ . '/classes/SudemiSync.php';
 require_once __DIR__ . '/classes/SudemiClaims.php';
 require_once __DIR__ . '/classes/SudemiOrders.php';

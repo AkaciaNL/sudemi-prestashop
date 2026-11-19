@@ -13,6 +13,26 @@
   <div class="sudemi-card"><div class="sudemi-card-body"><p class="sudemi-empty">{$sudemi_t.not_connected|escape:'html':'UTF-8'}</p></div></div>
 {else}
   <p class="sudemi-intro">{$sudemi_t.prod_intro|escape:'html':'UTF-8'}</p>
+  {if $sudemi.issues}
+  <div class="sudemi-card" id="sudemi-issues">
+    <div class="sudemi-card-head"><h3>{$sudemi_t.is_title|escape:'html':'UTF-8'}</h3></div>
+    <div class="sudemi-card-body">
+      <p class="sudemi-muted">{$sudemi_t.is_intro|escape:'html':'UTF-8'}</p>
+      <table class="table">
+        <thead><tr><th>{$sudemi_t.is_product|escape:'html':'UTF-8'}</th><th>{$sudemi_t.is_what|escape:'html':'UTF-8'}</th><th>{$sudemi_t.is_details|escape:'html':'UTF-8'}</th></tr></thead>
+        <tbody>
+        {foreach from=$sudemi.issues item=is}
+          <tr>
+            <td>{if $is.edit_url}<a href="{$is.edit_url|escape:'html':'UTF-8'}">{$is.product|escape:'html':'UTF-8'}</a>{else}{$is.product|escape:'html':'UTF-8'}{/if}</td>
+            <td><strong>{$is.status|escape:'html':'UTF-8'}</strong><br />{$is.what|escape:'html':'UTF-8'}</td>
+            <td>{$is.details|escape:'html':'UTF-8'}</td>
+          </tr>
+        {/foreach}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {/if}
   <div class="sudemi-card">
     <div class="sudemi-card-head">
       <div class="sudemi-tabs" id="sudemi-listing-tabs">

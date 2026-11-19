@@ -1158,9 +1158,34 @@ class SudemiAdminPages
             'prev_url' => $page > 0 ? $this->url(self::PRODUCTS, ['page' => $page - 1] + $base) : '',
             'next_url' => $offset + count($items) < $total ? $this->url(self::PRODUCTS, ['page' => $page + 1] + $base) : '',
             'self_url' => $this->url(self::PRODUCTS, ['page' => $page] + $base),
+            'issues' => $this->issueRows(),
         ];
 
         return $this->render('sudemi-products.tpl', $vars, self::PRODUCTS);
+    }
+
+    /**
+     * What the module could not send to sudemi (left out, not listed) and what sudemi refused,
+     * from the last catalogue pushes (SudemiIssues), in plain words; newest first, at most 100.
+     */
+    private function issueRows()
+    {
+        $rows = [];
+        $languageId = (int) $this->context->language->id;
+        foreach (array_slice(array_reverse(SudemiIssues::all()), 0, 100) as $issue) {
+            $productId = SudemiIssues::productId($issue['externalId']);
+            $name = $productId > 0 ? (string) Product::getProductName($productId, null, $languageId) : '';
+            $key = 'is_' . (string) $issue['code'];
+            $rows[] = [
+                'product' => $name !== '' ? $name : (string) $issue['externalId'],
+                'edit_url' => $productId > 0 ? $this->productEditUrl($productId) : '',
+                'status' => $issue['severity'] === 'error' ? $this->t['is_not_listed'] : $this->t['is_partly'],
+                'what' => isset($this->t[$key]) ? $this->t[$key] : $this->t['is_other'],
+                'details' => ((string) $issue['field'] !== '' ? $issue['field'] . ': ' : '') . (string) $issue['message'],
+            ];
+        }
+
+        return $rows;
     }
 
     private function productEditUrl($productId)

@@ -40,6 +40,10 @@
   right of withdrawal; off by default). An item made with a text the buyer typed is not returnable
   by default on sudemi, as EU law allows, and buyers are told before paying; switch it on to accept
   returns of such items on that product.
+- **What the module leaves out is reported, to sudemi and to you.** A product that needs more than
+  five texts, a required file upload, "Available for order" off, a product without a price, or
+  optional texts beyond five: each catalogue push now tells sudemi (issues), and the "Products on
+  sudemi" page lists them with what sudemi refused, in plain words, in your language.
 - **Fix (money): only prices every buyer gets are sent.** A sale or discount for a customer
   group (for example registered customers only), a single customer or another country was sent
   as everyone's price. Now only specific prices for all groups or the guest group, any or the

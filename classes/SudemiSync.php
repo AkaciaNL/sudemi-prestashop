@@ -231,14 +231,24 @@ class SudemiSync
                 }
             }
             list($batches) = self::chunkListings($listings, (int) $state['limit'], true);
+            // What was left out of this page goes with its first request (SudemiIssues).
+            $fresh = (int) $state['sent'] === 0 && (int) $state['cursor'] === 0;
             foreach ($batches as $batch) {
-                $result = SudemiClient::postSigned('/integration/v1/products', [
+                $issues = SudemiIssues::take();
+                $result = SudemiClient::postSigned('/integration/v1/products', SudemiIssues::attach([
                     'syncId' => $state['id'],
                     'products' => $batch,
-                ]);
+                ], $issues));
                 if ($result === null || $result['status'] !== 200) {
                     return self::failed($result, 'A batch failed');
                 }
+                SudemiIssues::remember($batch, $issues, isset($result['body']) ? $result['body'] : null, $fresh);
+                $fresh = false;
+            }
+            // Nothing listed on this page but something left out: the shop still sees it.
+            $left = SudemiIssues::take();
+            if (!empty($left)) {
+                SudemiIssues::remember([], $left, null, $fresh);
             }
             // Moved on only once the whole page is in: a step stopped halfway sends it again,
             // which sudemi takes as the same products once more.
@@ -492,6 +502,11 @@ class SudemiSync
 
             return;
         }
+        // Not listed because of something the module left out: the shop still sees why.
+        $left = SudemiIssues::take();
+        if (!empty($left)) {
+            SudemiIssues::remember([], $left, null);
+        }
         if ($priced) {
             // Switched off: its listings stay on sudemi until a full sync's commit removes them.
             self::noteRemoval();
@@ -569,7 +584,12 @@ class SudemiSync
                 }
             }
 
-            $response = SudemiClient::postSigned('/integration/v1/products', $body);
+            // What was left out of this product goes with its first request (SudemiIssues).
+            $issues = $i === 0 ? SudemiIssues::take() : [];
+            $response = SudemiClient::postSigned('/integration/v1/products', SudemiIssues::attach($body, $issues));
+            if (is_array($response) && $response['status'] === 200) {
+                SudemiIssues::remember($batch, $issues, isset($response['body']) ? $response['body'] : null);
+            }
             if (!is_array($response) || $response['status'] !== 200) {
                 $clean = false;
                 foreach ($batch as $listing) {
@@ -757,6 +777,7 @@ class SudemiSync
             $item['personalisation'] = SudemiVariants::personalisation($fields, $attributes, $groups);
             if ($item['personalisation'] === null) {
                 // More required texts than sudemi can ask: not sellable here (see SudemiVariants).
+                SudemiIssues::add($item['externalId'], SudemiIssues::TOO_MANY_REQUIRED_TEXTS, 'error', 'customization', 'Not listed: more than ' . SudemiVariants::MAX_FIELDS . ' required texts for the buyer to type.');
                 continue;
             }
             $priceKey = (string) $item['priceMinor'];
@@ -914,11 +935,15 @@ class SudemiSync
         }
         // Not orderable in the shop itself ("Available for order" off, a catalogue-only product).
         if (isset($product->available_for_order) && !$product->available_for_order) {
+            SudemiIssues::add($productId, SudemiIssues::NOT_AVAILABLE_FOR_ORDER, 'error', 'available_for_order', 'Not listed: "Available for order" is off in the shop.');
+
             return null;
         }
         // A required file upload (a photo to print) cannot be asked for through sudemi.
         $fields = self::customizationFields($product, $languageId);
         if (!SudemiVariants::sellable($fields)) {
+            SudemiIssues::add($productId, SudemiIssues::REQUIRED_FILE_UPLOAD, 'error', 'customization', 'Not listed: a required file upload cannot be asked for through sudemi.');
+
             return null;
         }
 
@@ -973,7 +998,18 @@ class SudemiSync
 
         if ($payload['personalisation'] === null) {
             // More required texts than sudemi can ask: not sellable here (see SudemiVariants).
+            SudemiIssues::add($productId, SudemiIssues::TOO_MANY_REQUIRED_TEXTS, 'error', 'customization', 'Not listed: more than ' . SudemiVariants::MAX_FIELDS . ' required texts for the buyer to type.');
+
             return null;
+        }
+        $texts = count(array_filter($fields, function ($f) {
+            return (int) $f['type'] === SudemiVariants::FIELD_TEXT;
+        }));
+        if ($texts > SudemiVariants::MAX_FIELDS) {
+            SudemiIssues::add($productId, SudemiIssues::TOO_MANY_OPTIONAL_TEXTS, 'warning', 'customization', 'Listed, but only ' . SudemiVariants::MAX_FIELDS . ' of ' . $texts . ' texts are asked (optional ones left out).');
+        }
+        if ((int) $payload['priceMinor'] < 1) {
+            SudemiIssues::add($productId, SudemiIssues::MISSING_PRICE, 'error', 'price', 'The product has no price.');
         }
 
         // The sale window, quantity prices, availability without stock, size, condition (v2).

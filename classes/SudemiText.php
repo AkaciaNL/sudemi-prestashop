@@ -358,6 +358,21 @@ class SudemiText
         'note_decline_shop' => 'Declined by the shop on sudemi; the buyer was not charged.',
         'note_decline_sudemi' => 'Declined automatically by sudemi (for example because the order was not answered in time); the buyer was not charged.',
         'note_decline' => 'Declined on sudemi; the buyer was not charged.',
+        // catalogue issues (1.4.4): what the module left out, and what sudemi refused
+        'is_title' => 'What sudemi cannot offer, and why',
+        'is_intro' => 'Found during the last catalogue sync. Products marked "Not listed" are not shown to buyers until this is solved; the others are listed without what is named here.',
+        'is_product' => 'Product',
+        'is_what' => 'What happened',
+        'is_details' => 'Details',
+        'is_not_listed' => 'Not listed',
+        'is_partly' => 'Listed, with something left out',
+        'is_too_many_required_texts' => 'The product needs more than five texts or choices from the buyer; sudemi can ask five, so it is not listed.',
+        'is_too_many_optional_texts' => 'sudemi asks the buyer at most five texts or choices; an optional one is not asked.',
+        'is_missing_price' => 'The product has no price, so it is not listed.',
+        'is_rejected' => 'sudemi refused this product.',
+        'is_other' => 'Something about this product could not be sent to sudemi.',
+        'is_required_file_upload' => 'The product needs a file from the buyer (a photo to print); sudemi cannot ask for a file, so it is not listed.',
+        'is_not_available_for_order' => '"Available for order" is off for this product in your shop, so it is not listed.',
     ];
 
     /**
