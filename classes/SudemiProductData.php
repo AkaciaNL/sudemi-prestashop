@@ -190,24 +190,64 @@ class SudemiProductData
             $out['condition'] = $condition;
         }
 
-        // Quantity prices: the price per unit PrestaShop charges from each quantity on.
+        // Quantity prices: what each specific price from 2 items up makes the unit price, sent
+        // when it is below the regular price (sudemi charges the lower of a running sale and it).
+        $regular = self::regular($product, $attributeId, $minor);
         $prices = [];
         foreach (self::specificPrices($id, $attributeId) as $row) {
             $from = (int) $row['from_quantity'];
             if ($from > 1 && self::runsNow($row)) {
-                $prices[$from] = $minor(Product::getPriceStatic($id, true, $attributeId ?: null, 6, null, false, true, $from));
+                $price = self::rowPrice($row, $regular, $product, $minor);
+                if (!isset($prices[$from]) || $price < $prices[$from]) {
+                    $prices[$from] = $price;
+                }
             }
         }
-        $tiers = self::tiers($prices, $unitMinor);
+        $tiers = self::tiers($prices, $regular[0]);
         if (!empty($tiers)) {
             $out['quantityPrices'] = $tiers;
         }
 
-        return array_merge($out, self::saleFor($product, $attributeId, $unitMinor, $minor));
+        return array_merge($out, self::saleFor($product, $attributeId, $regular, $minor));
     }
 
-    /** A dated reduction for one item: running now (the price PrestaShop charges) or coming. */
-    private static function saleFor(Product $product, $attributeId, $unitMinor, callable $minor)
+    /**
+     * The regular price of an item, [with VAT, without VAT] in minor units: the product's price
+     * plus the combination's impact, without any specific price (a specific price can replace
+     * the base price, so PrestaShop's own price without reductions is not the regular price).
+     */
+    private static function regular(Product $product, $attributeId, callable $minor)
+    {
+        $excl = (float) $product->price;
+        if ($attributeId) {
+            $combination = new Combination((int) $attributeId);
+            if (Validate::isLoadedObject($combination)) {
+                $excl += (float) $combination->price;
+            }
+        }
+        $rate = Configuration::get('PS_TAX') ? (float) Tax::getProductTaxRate((int) $product->id) : 0.0;
+
+        return [(int) $minor($excl * (1 + $rate / 100)), (int) $minor($excl), $rate];
+    }
+
+    /** The unit price one specific price row gives, in minor units with VAT. */
+    private static function rowPrice(array $row, array $regular, Product $product, callable $minor)
+    {
+        list($incl, $excl, $rate) = $regular;
+        if ((float) $row['price'] >= 0) {
+            $excl = (int) $minor((float) $row['price']);
+            $incl = (int) $minor((float) $row['price'] * (1 + $rate / 100));
+        }
+        if ((float) $row['reduction'] <= 0) {
+            return $incl;
+        }
+        $reduction = (string) $row['reduction_type'] === 'percentage' ? (float) $row['reduction'] : (float) $minor((float) $row['reduction']);
+
+        return self::reduced($incl, $excl, (string) $row['reduction_type'], $reduction, (bool) $row['reduction_tax']);
+    }
+
+    /** A dated reduction for one quantity: the running one, else the next to start. */
+    private static function saleFor(Product $product, $attributeId, array $regular, callable $minor)
     {
         $id = (int) $product->id;
         $now = date('Y-m-d H:i:s');
@@ -219,7 +259,6 @@ class SudemiProductData
             if (self::isDate($row['to']) && $row['to'] < $now) {
                 continue;
             }
-            // The running one first, else the next to start.
             if ($best === null || (self::runsNow($row) && !self::runsNow($best))
                 || (!self::runsNow($row) && !self::runsNow($best) && (string) $row['from'] < (string) $best['from'])) {
                 $best = $row;
@@ -228,19 +267,8 @@ class SudemiProductData
         if ($best === null) {
             return [];
         }
-        $regular = $minor(Product::getPriceStatic($id, true, $attributeId ?: null, 6, null, false, false));
-        if (self::runsNow($best)) {
-            $sale = $unitMinor;
-        } elseif ((float) $best['price'] < 0) {
-            $regularExcl = $minor(Product::getPriceStatic($id, false, $attributeId ?: null, 6, null, false, false));
-            $reduction = (string) $best['reduction_type'] === 'percentage' ? (float) $best['reduction'] : (float) $minor((float) $best['reduction']);
-            $sale = self::reduced($regular, $regularExcl, (string) $best['reduction_type'], $reduction, (bool) $best['reduction_tax']);
-        } else {
-            // A fixed price that has not started: only PrestaShop knows its tax and currency.
-            return [];
-        }
 
-        return self::sale($regular, $sale, $best['from'], $best['to'], Configuration::get('PS_TIMEZONE'), time());
+        return self::sale($regular[0], self::rowPrice($best, $regular, $product, $minor), $best['from'], $best['to'], Configuration::get('PS_TIMEZONE'), time());
     }
 
     private static function runsNow(array $row)
