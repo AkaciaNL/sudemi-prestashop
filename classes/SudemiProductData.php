@@ -183,23 +183,27 @@ class SudemiProductData
             }
         }
         $later = is_array($product->available_later) ? (string) reset($product->available_later) : (string) $product->available_later;
-        $out = array_merge($out, self::availability($quantity, (bool) Product::isAvailableWhenOutOfStock($outOfStock), $date, $later, date('Y-m-d')));
+        $out = array_merge($out, self::availability($quantity, (bool) Product::isAvailableWhenOutOfStock($outOfStock), $date, $later, substr(self::now(), 0, 10)));
         $out = array_merge($out, self::dimensions($product->width, $product->height, $product->depth, Configuration::get('PS_DIMENSION_UNIT')));
         $condition = self::condition($product->condition);
         if ($condition !== null) {
             $out['condition'] = $condition;
         }
 
-        // Quantity prices: what each specific price from 2 items up makes the unit price, sent
-        // when it is below the regular price (sudemi charges the lower of a running sale and it).
+        // Quantity prices: from each quantity a specific price starts at, the unit price of the
+        // row PrestaShop itself would pick for a guest (priority order as
+        // SpecificPrice::getSpecificPrice), sent when below the regular price (sudemi charges the
+        // lower of a running sale and it).
         $regular = self::regular($product, $attributeId, $minor);
+        $rows = self::rowsFor($id, $attributeId);
+        $now = self::now();
         $prices = [];
-        foreach (self::specificPrices($id, $attributeId) as $row) {
+        foreach ($rows as $row) {
             $from = (int) $row['from_quantity'];
-            if ($from > 1 && self::runsNow($row)) {
-                $price = self::rowPrice($row, $regular, $product, $minor);
-                if (!isset($prices[$from]) || $price < $prices[$from]) {
-                    $prices[$from] = $price;
+            if ($from > 1 && !isset($prices[$from])) {
+                $winner = self::winner($rows, $from, $now);
+                if ($winner !== null) {
+                    $prices[$from] = self::rowPrice($winner, $regular, $product, $minor);
                 }
             }
         }
@@ -249,53 +253,155 @@ class SudemiProductData
         return self::reduced($incl, $excl, (string) $row['reduction_type'], $reduction, (bool) $row['reduction_tax']);
     }
 
-    /** A dated reduction for one quantity: the running one, else the next to start. */
+    /**
+     * The sale for one item: the dated specific price PrestaShop applies for one item now, else
+     * the next dated one to start (same scope and priority order).
+     */
     private static function saleFor(Product $product, $attributeId, array $regular, callable $minor)
     {
-        $id = (int) $product->id;
-        $now = date('Y-m-d H:i:s');
-        $best = null;
-        foreach (self::specificPrices($id, $attributeId) as $row) {
-            if ((int) $row['from_quantity'] > 1 || (!self::isDate($row['from']) && !self::isDate($row['to']))) {
-                continue;
+        $rows = self::rowsFor((int) $product->id, $attributeId);
+        $now = self::now();
+        $running = self::winner($rows, 1, $now);
+        $sale = null;
+        if ($running !== null) {
+            if (!self::isDate($running['from']) && !self::isDate($running['to'])) {
+                // An undated reduction is simply the shop's price.
+                return [];
             }
-            if (self::isDate($row['to']) && $row['to'] < $now) {
-                continue;
+            $sale = $running;
+        } else {
+            $next = null;
+            foreach ($rows as $row) {
+                if ((int) $row['from_quantity'] <= 1 && self::isDate($row['from']) && $row['from'] > $now
+                    && ($next === null || $row['from'] < $next['from'])) {
+                    $next = $row;
+                }
             }
-            if ($best === null || (self::runsNow($row) && !self::runsNow($best))
-                || (!self::runsNow($row) && !self::runsNow($best) && (string) $row['from'] < (string) $best['from'])) {
-                $best = $row;
+            if ($next !== null) {
+                // What PrestaShop will pick at that moment.
+                $sale = self::winner($rows, 1, $next['from']);
             }
         }
-        if ($best === null) {
+        if ($sale === null || (!self::isDate($sale['from']) && !self::isDate($sale['to']))) {
             return [];
         }
 
-        return self::sale($regular[0], self::rowPrice($best, $regular, $product, $minor), $best['from'], $best['to'], Configuration::get('PS_TIMEZONE'), time());
+        return self::sale($regular[0], self::rowPrice($sale, $regular, $product, $minor), $sale['from'], $sale['to'], self::zone(), time());
     }
 
-    private static function runsNow(array $row)
+    /** The shop's time zone: PrestaShop stores specific price dates in it. */
+    private static function zone()
     {
-        $now = date('Y-m-d H:i:s');
-
-        return (!self::isDate($row['from']) || $row['from'] <= $now) && (!self::isDate($row['to']) || $row['to'] >= $now);
+        return (string) Configuration::get('PS_TIMEZONE') ?: 'UTC';
     }
 
-    /** Specific prices for every customer of the shop's default group, country and currency. */
-    private static function specificPrices($productId, $attributeId)
+    /** Now, as PrestaShop compares specific price dates ('Y-m-d H:i:s' in PS_TIMEZONE). */
+    private static function now()
     {
+        return (new DateTime('now', new DateTimeZone(self::zone())))->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * The row PrestaShop applies for this quantity at this moment, or null. Pure: the same
+     * filter and order as SpecificPrice::getSpecificPrice (attribute rows first, then the
+     * highest starting quantity, catalogue rules after, then the priority score, then the
+     * latest end and start).
+     */
+    public static function winner(array $rows, $quantity, $at)
+    {
+        $candidates = array_values(array_filter($rows, function ($row) use ($quantity, $at) {
+            return ((int) $row['from_quantity'] > 1 ? (int) $row['from_quantity'] : 0) <= (int) $quantity
+                && (!self::isDate($row['from']) || $row['from'] <= $at)
+                && (!self::isDate($row['to']) || $row['to'] >= $at);
+        }));
+        usort($candidates, function ($a, $b) {
+            foreach ([['id_product_attribute', -1], ['from_quantity', -1], ['id_specific_price_rule', 1], ['score', -1], ['to', -1], ['from', -1]] as $order) {
+                list($field, $dir) = $order;
+                $x = isset($a[$field]) ? $a[$field] : 0;
+                $y = isset($b[$field]) ? $b[$field] : 0;
+                if ($x != $y) {
+                    return ($x < $y ? -1 : 1) * $dir;
+                }
+            }
+
+            return 0;
+        });
+
+        return empty($candidates) ? null : $candidates[0];
+    }
+
+    /**
+     * PrestaShop's score of a row for a guest: for each field of the shop's priority order that
+     * the row names (shop, currency, country, group, customer), 2^(position from the end + 1).
+     * Pure.
+     *
+     * @param array $priority e.g. ['id_customer', 'id_shop', 'id_currency', 'id_country', 'id_group']
+     * @param array $values   field => the guest's value
+     */
+    public static function score(array $row, array $priority, array $values)
+    {
+        $score = 0;
+        foreach (array_values(array_reverse($priority)) as $k => $field) {
+            if ($field !== '' && isset($values[$field]) && isset($row[$field]) && (int) $row[$field] === (int) $values[$field]) {
+                $score += 2 ** ($k + 1);
+            }
+        }
+
+        return $score;
+    }
+
+    /** Rows for one item (the product's and the combination's). */
+    private static function rowsFor($productId, $attributeId)
+    {
+        return array_values(array_filter(self::specificPrices($productId), function ($row) use ($attributeId) {
+            return (int) $row['id_product_attribute'] === 0 || (int) $row['id_product_attribute'] === (int) $attributeId;
+        }));
+    }
+
+    /** Rows of one product read in this request (forListing runs once per combination). */
+    private static $rows = [];
+
+    /** Forgets the rows read (a new sync, or a price changed since). */
+    public static function reset()
+    {
+        self::$rows = [];
+    }
+
+    /**
+     * The specific prices a guest gets (what sudemi's buyers are): customer 0, no cart, group 0
+     * or the guest group (never a customers-only price), country and currency 0 or the shop's,
+     * shop 0 or this one, as SpecificPrice::getSpecificPrice selects them; with their score.
+     */
+    private static function specificPrices($productId)
+    {
+        if (isset(self::$rows[(int) $productId])) {
+            return self::$rows[(int) $productId];
+        }
         $context = Context::getContext();
+        $values = [
+            'id_shop' => (int) $context->shop->id,
+            'id_currency' => (int) Configuration::get('PS_CURRENCY_DEFAULT'),
+            'id_country' => (int) Configuration::get('PS_COUNTRY_DEFAULT'),
+            'id_group' => (int) Configuration::get('PS_UNIDENTIFIED_GROUP'),
+            'id_customer' => 0,
+        ];
         $rows = Db::getInstance()->executeS(
-            'SELECT from_quantity, `from`, `to`, price, reduction, reduction_type, reduction_tax FROM ' . _DB_PREFIX_ . 'specific_price
-              WHERE id_product = ' . (int) $productId . '
-                AND id_product_attribute IN (0, ' . (int) $attributeId . ')
+            'SELECT id_specific_price, id_specific_price_rule, id_product_attribute, id_shop, id_currency, id_country, id_group, id_customer,
+                    from_quantity, `from`, `to`, price, reduction, reduction_type, reduction_tax FROM ' . _DB_PREFIX_ . 'specific_price
+              WHERE id_product IN (0, ' . (int) $productId . ')
                 AND id_customer = 0 AND id_cart = 0
-                AND id_shop IN (0, ' . (int) $context->shop->id . ')
-                AND id_group IN (0, ' . (int) Configuration::get('PS_UNIDENTIFIED_GROUP') . ', ' . (int) Configuration::get('PS_CUSTOMER_GROUP') . ')
-                AND id_country IN (0, ' . (int) Configuration::get('PS_COUNTRY_DEFAULT') . ')
-                AND id_currency IN (0, ' . (int) Configuration::get('PS_CURRENCY_DEFAULT') . ')'
+                AND id_shop IN (0, ' . $values['id_shop'] . ')
+                AND id_group IN (0, ' . $values['id_group'] . ')
+                AND id_country IN (0, ' . $values['id_country'] . ')
+                AND id_currency IN (0, ' . $values['id_currency'] . ')'
         );
+        $priority = is_callable(['SpecificPrice', 'getPriority']) ? (array) SpecificPrice::getPriority((int) $productId) : ['id_shop', 'id_currency', 'id_country', 'id_group'];
+        $out = [];
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $row['score'] = self::score($row, $priority, $values);
+            $out[] = $row;
+        }
 
-        return is_array($rows) ? $rows : [];
+        return self::$rows[(int) $productId] = $out;
     }
 }

@@ -64,7 +64,13 @@ $six = array();
 for ( $i = 1; $i <= 6; $i++ ) {
 	$six[] = array( 'id_customization_field' => $i, 'type' => 1, 'required' => 0, 'name' => "Line $i" );
 }
-check( 'at most 5 texts per listing (sudemi\'s limit)', 5 === count( SudemiVariants::personalisation( $six, array(), array() ) ) );
+check( 'at most 5 texts per listing (sudemi\'s limit): an optional sixth is not asked', 5 === count( SudemiVariants::personalisation( $six, array(), array() ) ) );
+$mixed = $six;
+$mixed[5]['required'] = 1;
+$p6    = SudemiVariants::personalisation( $mixed, array(), array() );
+check( 'a required sixth text is kept (required first), an optional one left out instead', 5 === count( $p6 ) && 'c6' === $p6[0]['key'] && $p6[0]['required'] );
+$req6 = array_map( function ( $f ) { $f['required'] = 1; return $f; }, $six );
+check( 'six required texts: the listing cannot be sold through sudemi (null)', null === SudemiVariants::personalisation( $req6, array(), array() ) );
 check( 'a required file upload is not sellable', false === SudemiVariants::sellable( array( $text, array( 'type' => 0, 'required' => 1 ) ) ) );
 check( 'an optional file upload is', true === SudemiVariants::sellable( array( $text, $file ) ) );
 

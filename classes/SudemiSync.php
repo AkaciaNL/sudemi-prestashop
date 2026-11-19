@@ -693,6 +693,8 @@ class SudemiSync
      */
     private static function listings($productId, $languageId)
     {
+        // Specific prices are read once per product (not per combination) and fresh per product.
+        SudemiProductData::reset();
         $base = self::productPayload($productId, $languageId);
         if ($base === null) {
             return [];
@@ -751,6 +753,10 @@ class SudemiSync
                 return ['name' => $a['name'], 'values' => [$a['value']]];
             }, $variant), $base['specs']);
             $item['personalisation'] = SudemiVariants::personalisation($fields, $attributes, $groups);
+            if ($item['personalisation'] === null) {
+                // More required texts than sudemi can ask: not sellable here (see SudemiVariants).
+                continue;
+            }
             $priceKey = (string) $item['priceMinor'];
             if (!isset($shippingByPrice[$priceKey])) {
                 $shippingByPrice[$priceKey] = SudemiShipping::ratesFor($product, $price);
@@ -962,6 +968,11 @@ class SudemiSync
             'maxTransitTimeDays' => SudemiShipping::transitDays(),
             'brand' => $product->id_manufacturer ? (string) Manufacturer::getNameById((int) $product->id_manufacturer) : null,
         ];
+
+        if ($payload['personalisation'] === null) {
+            // More required texts than sudemi can ask: not sellable here (see SudemiVariants).
+            return null;
+        }
 
         // The sale window, quantity prices, availability without stock, size, condition (v2).
         $payload = array_merge($payload, SudemiProductData::forListing($product, 0, $payload['quantity'], $payload['priceMinor'], function ($price) {

@@ -1078,7 +1078,11 @@ class SudemiOrders
                 return sprintf('"%s" is sold in quantities of at least %d', $name, $minimal);
             }
             // A text the buyer has to type (a name to print) that did not come with the order.
-            $missing = SudemiVariants::missing(SudemiSync::personalisationFor($productId, $attributeId), SudemiVariants::typed($line));
+            $asked = SudemiSync::personalisationFor($productId, $attributeId);
+            if ($asked === null) {
+                return sprintf('"%s" needs more texts typed by the buyer than sudemi can ask', $name);
+            }
+            $missing = SudemiVariants::missing($asked, SudemiVariants::typed($line));
             if ($missing !== null) {
                 return sprintf('the text "%s" the buyer has to type for "%s" is missing', $missing, $name);
             }
@@ -1359,12 +1363,21 @@ class SudemiOrders
             return null;
         }
         foreach ($typed as $fieldId => $text) {
-            Db::getInstance()->insert('customized_data', [
+            $written = Db::getInstance()->insert('customized_data', [
                 'id_customization' => (int) $customization->id,
                 'type' => (int) Product::CUSTOMIZE_TEXTFIELD,
                 'index' => (int) $fieldId,
                 'value' => pSQL($text),
             ]);
+            if (!$written) {
+                // The buyer's text could not be stored: no order without it. The caller deletes
+                // the cart; the half-written customization goes here.
+                Db::getInstance()->delete('customized_data', 'id_customization = ' . (int) $customization->id);
+                $customization->delete();
+                SudemiLogger::warn('The text the buyer typed could not be stored on the order; the order was not created.');
+
+                return null;
+            }
         }
 
         return (int) $customization->id;

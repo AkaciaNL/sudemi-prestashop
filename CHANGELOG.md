@@ -36,6 +36,16 @@
   the condition (new, used, refurbished). A price update never ends a running sale.
 - **Fix: a product you allow to be ordered without stock is no longer declined** when its stock
   is 0; the order is taken, as in your own shop.
+- **Fix (money): only prices every buyer gets are sent.** A sale or discount for a customer
+  group (for example registered customers only), a single customer or another country was sent
+  as everyone's price. Now only specific prices for all groups or the guest group, any or the
+  shop's country and currency are read, and when several overlap the one PrestaShop itself would
+  apply is used (its own priority order). Dates are compared in the shop's time zone.
+- **Fix: a product that needs more than five texts typed by the buyer is not listed** (sudemi can
+  ask five; required texts come first). Before, a required sixth text was left out and the order
+  was taken without it.
+- **Fix: if the text the buyer typed cannot be stored**, the order is not created and is declined,
+  instead of an order without the text.
 
 ## 1.4.3
 

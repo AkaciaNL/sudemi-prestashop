@@ -92,7 +92,7 @@ class SudemiVariants
 
     /**
      * What sudemi asks the buyer to type for one listing: [{key, label, required, maxLength,
-     * priceMinor}].
+     * priceMinor}], or null when the listing needs more required texts than sudemi can ask.
      *
      * @param array $fields rows of Product::getCustomizationFields() (id_customization_field, type, required, name)
      * @param array $sortedRows the combination's attribute rows (empty for a product without combinations)
@@ -131,8 +131,20 @@ class SudemiVariants
             ];
         }
 
-        // A sixth text is not asked (and, if required, the order is declined).
-        return array_slice($out, 0, self::MAX_FIELDS);
+        // sudemi asks at most five. Required texts first; more than five required ones cannot be
+        // asked at all, so the item cannot be sold through sudemi (null). An optional sixth is
+        // simply not asked.
+        $required = array_values(array_filter($out, function ($f) {
+            return $f['required'];
+        }));
+        if (count($required) > self::MAX_FIELDS) {
+            return null;
+        }
+        $optional = array_values(array_filter($out, function ($f) {
+            return !$f['required'];
+        }));
+
+        return array_slice(array_merge($required, $optional), 0, self::MAX_FIELDS);
     }
 
     /**
