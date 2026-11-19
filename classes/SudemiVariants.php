@@ -34,6 +34,10 @@ class SudemiVariants
     /** PrestaShop keeps a customization text in a 255-character column. */
     public const TEXT_MAX = 255;
 
+    /** sudemi takes texts of at most 200 characters, and at most 5 per listing. */
+    public const SUDEMI_MAX = 200;
+    public const MAX_FIELDS = 5;
+
     /**
      * One combination's attribute rows, in the order of their groups' positions.
      *
@@ -122,12 +126,13 @@ class SudemiVariants
                 'key' => 'c' . (int) $field['id_customization_field'],
                 'label' => $label !== '' ? $label : 'Text',
                 'required' => $required,
-                'maxLength' => self::TEXT_MAX,
+                'maxLength' => self::SUDEMI_MAX,
                 'priceMinor' => 0,
             ];
         }
 
-        return $out;
+        // A sixth text is not asked (and, if required, the order is declined).
+        return array_slice($out, 0, self::MAX_FIELDS);
     }
 
     /**

@@ -50,8 +50,8 @@ check( 'no public name: the group name', SudemiVariants::attributes( array( row(
 $text = array( 'id_customization_field' => 5, 'type' => 1, 'required' => 0, 'name' => 'Name to print' );
 $file = array( 'id_customization_field' => 6, 'type' => 0, 'required' => 0, 'name' => 'Photo' );
 $p_yes = SudemiVariants::personalisation( array( $text, $file ), $sorted, $groups );
-check( 'Yes combination: the text, required, price 0, 255 long; the file is not asked', $p_yes === array(
-	array( 'key' => 'c5', 'label' => 'Name to print', 'required' => true, 'maxLength' => 255, 'priceMinor' => 0 ),
+check( 'Yes combination: the text, required, price 0, 200 long (sudemi\'s limit); the file is not asked', $p_yes === array(
+	array( 'key' => 'c5', 'label' => 'Name to print', 'required' => true, 'maxLength' => 200, 'priceMinor' => 0 ),
 ) );
 $no     = SudemiVariants::sorted( array( row( 1, 14, 'XL', 'Size' ), row( 4, 40, 'No', 'Name to print' ) ), $groups );
 check( 'No combination (the group\'s first value): no text asked', SudemiVariants::personalisation( array( $text ), $no, $groups ) === array() );
@@ -60,6 +60,11 @@ check( 'no group of that name: asked as the shop set it (optional)', SudemiVaria
 check( 'product without combinations: asked', count( SudemiVariants::personalisation( array( $text ), array(), array() ) ) === 1 );
 check( 'case and spaces of the group name do not matter', count( SudemiVariants::personalisation( array( array( 'id_customization_field' => 5, 'type' => 1, 'required' => 0, 'name' => ' name TO print ' ) ), $no, $groups ) ) === 0 );
 
+$six = array();
+for ( $i = 1; $i <= 6; $i++ ) {
+	$six[] = array( 'id_customization_field' => $i, 'type' => 1, 'required' => 0, 'name' => "Line $i" );
+}
+check( 'at most 5 texts per listing (sudemi\'s limit)', 5 === count( SudemiVariants::personalisation( $six, array(), array() ) ) );
 check( 'a required file upload is not sellable', false === SudemiVariants::sellable( array( $text, array( 'type' => 0, 'required' => 1 ) ) ) );
 check( 'an optional file upload is', true === SudemiVariants::sellable( array( $text, $file ) ) );
 
