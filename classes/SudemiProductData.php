@@ -218,7 +218,10 @@ class SudemiProductData
      */
     private static function regular(Product $product, $attributeId, callable $minor)
     {
-        $excl = (float) $product->price;
+        // The stored price: a Product loaded "full" holds the price after specific prices.
+        $stored = Db::getInstance()->getValue('SELECT price FROM ' . _DB_PREFIX_ . 'product_shop WHERE id_product = ' . (int) $product->id
+            . ' AND id_shop = ' . (int) Context::getContext()->shop->id);
+        $excl = $stored !== false && $stored !== null ? (float) $stored : (float) $product->price;
         if ($attributeId) {
             $combination = new Combination((int) $attributeId);
             if (Validate::isLoadedObject($combination)) {
