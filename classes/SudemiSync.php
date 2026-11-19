@@ -245,11 +245,8 @@ class SudemiSync
                 SudemiIssues::remember($batch, $issues, isset($result['body']) ? $result['body'] : null, $fresh);
                 $fresh = false;
             }
-            // Nothing listed on this page but something left out: the shop still sees it.
-            $left = SudemiIssues::take();
-            if (!empty($left)) {
-                SudemiIssues::remember([], $left, null, $fresh);
-            }
+            // Nothing listed on this page but something left out: sent on its own (best effort).
+            self::sendLeftIssues($state['id'], $fresh);
             // Moved on only once the whole page is in: a step stopped halfway sends it again,
             // which sudemi takes as the same products once more.
             $state['cursor'] = (int) end($ids);
@@ -502,11 +499,8 @@ class SudemiSync
 
             return;
         }
-        // Not listed because of something the module left out: the shop still sees why.
-        $left = SudemiIssues::take();
-        if (!empty($left)) {
-            SudemiIssues::remember([], $left, null);
-        }
+        // Not listed because of something the module left out: sudemi and the shop are told why.
+        self::sendLeftIssues(null);
         if ($priced) {
             // Switched off: its listings stay on sudemi until a full sync's commit removes them.
             self::noteRemoval();
@@ -600,6 +594,25 @@ class SudemiSync
                 $clean = false;
             }
         }
+    }
+
+    /**
+     * Issues found while building listings that were all left out (a product not listed): sent on
+     * their own, without products, which sudemi takes from 2026-11-19. Best effort: a core that
+     * refuses a push without products changes nothing here, and the shop sees them all the same.
+     */
+    private static function sendLeftIssues($syncId, $fresh = false)
+    {
+        $left = SudemiIssues::take();
+        if (empty($left)) {
+            return;
+        }
+        $body = ['products' => []];
+        if ($syncId !== null) {
+            $body['syncId'] = $syncId;
+        }
+        $answer = SudemiClient::postSigned('/integration/v1/products', SudemiIssues::attach($body, $left));
+        SudemiIssues::remember([], $left, is_array($answer) && $answer['status'] === 200 && isset($answer['body']) ? $answer['body'] : null, $fresh);
     }
 
     /** The price-and-stock part of a listing, as the retry queue keeps it. */
