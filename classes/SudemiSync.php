@@ -583,7 +583,8 @@ class SudemiSync
     /** The price-and-stock part of a listing, as the retry queue keeps it. */
     private static function priceUpdate(array $listing)
     {
-        return [
+        // With the sale and availability: a price alone would end a running sale.
+        return SudemiProductData::priceUpdateFields($listing) + [
             'externalId' => $listing['externalId'],
             'priceMinor' => $listing['priceMinor'],
             'currency' => $listing['currency'],
@@ -738,6 +739,13 @@ class SudemiSync
             $item['inStock'] = $quantity > 0;
             $item['weightGrams'] = (int) round(((float) $product->weight + (float) $first['weight']) * 1000);
             $item['minQuantity'] = isset($first['minimal_quantity']) ? max(1, (int) $first['minimal_quantity']) : $base['minQuantity'];
+            // The sale window, quantity prices, availability without stock, size, condition.
+            foreach (['availabilityDate', 'availabilityText', 'quantityPrices', 'regularPriceMinor', 'salePriceMinor', 'salePriceFrom', 'salePriceUntil'] as $own) {
+                unset($item[$own]);
+            }
+            $item = array_merge($item, SudemiProductData::forListing($product, $paid, $quantity, $item['priceMinor'], function ($price) {
+                return self::minor($price);
+            }));
             $item['url'] = $link->getProductLink($product, null, null, null, null, null, $paid);
             $item['specs'] = array_merge(array_map(function ($a) {
                 return ['name' => $a['name'], 'values' => [$a['value']]];
@@ -954,6 +962,11 @@ class SudemiSync
             'maxTransitTimeDays' => SudemiShipping::transitDays(),
             'brand' => $product->id_manufacturer ? (string) Manufacturer::getNameById((int) $product->id_manufacturer) : null,
         ];
+
+        // The sale window, quantity prices, availability without stock, size, condition (v2).
+        $payload = array_merge($payload, SudemiProductData::forListing($product, 0, $payload['quantity'], $payload['priceMinor'], function ($price) {
+            return self::minor($price);
+        }));
 
         // Excluded from the right of withdrawal (EU 2011/83 art. 16), with the reason; omitted when
         // the normal right applies. Combinations are built from this payload, so they inherit it.

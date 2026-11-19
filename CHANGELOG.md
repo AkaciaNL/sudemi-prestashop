@@ -29,6 +29,13 @@
   product's new prices to sudemi right away (one for all products asks for a full sync).
 - Delivery prices are worked out once per price for a product with many combinations (100 or
   more), so the sync of such a product stays quick.
+- **Everything else your products say is sent too** (sudemi product data v2): a sale or
+  discount with a start and end date (PrestaShop's specific prices; a coming one with its price),
+  quantity prices ("from 3 items"), what happens when there is no stock left (orders refused, or
+  taken with the "available later" text and the availability date), width, height and depth, and
+  the condition (new, used, refurbished). A price update never ends a running sale.
+- **Fix: a product you allow to be ordered without stock is no longer declined** when its stock
+  is 0; the order is taken, as in your own shop.
 
 ## 1.4.3
 

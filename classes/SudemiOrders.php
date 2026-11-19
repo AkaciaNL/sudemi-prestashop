@@ -1068,7 +1068,10 @@ class SudemiOrders
                 $minimal = (int) $combination->minimal_quantity;
             }
             $quantity = isset($line['quantity']) ? (int) $line['quantity'] : 1;
-            if ((int) StockAvailable::getQuantityAvailableByProduct($productId, $attributeId ?: null) < $quantity) {
+            // Out of stock is a refusal only when the shop takes no orders without stock
+            // (backorders: PrestaShop's "when out of stock" setting, 1.4.4).
+            if ((int) StockAvailable::getQuantityAvailableByProduct($productId, $attributeId ?: null) < $quantity
+                && !Product::isAvailableWhenOutOfStock(StockAvailable::outOfStock($productId))) {
                 return sprintf('"%s" is out of stock', $name);
             }
             if ($minimal > 1 && $quantity < $minimal) {
