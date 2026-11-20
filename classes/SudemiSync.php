@@ -959,9 +959,10 @@ class SudemiSync
     /**
      * One product, as sudemi stores it.
      *
-     * Images are sent as URLs on this shop's own origin, never as bytes: sudemi fetches them
-     * through its egress guard and refuses anything not on the verified shop, which stops a
-     * payload walking it around an internal network one image at a time.
+     * Images are sent as absolute URLs, never as bytes, in the shop's order (the cover first).
+     * Any public https address is accepted, a CDN included: sudemi fetches each one through its
+     * egress guard (public addresses only) and shows it to buyers through its own signed image
+     * proxy.
      */
     private static function productPayload($productId, $languageId)
     {
