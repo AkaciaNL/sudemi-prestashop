@@ -12,6 +12,25 @@ declare(strict_types=1);
 
 define( '_PS_VERSION_', 'test' );
 
+class Configuration {
+	public static $v = array();
+	public static function get( $k ) {
+		return isset( self::$v[ $k ] ) ? self::$v[ $k ] : false;
+	}
+	public static function updateValue( $k, $v ) {
+		self::$v[ $k ] = strip_tags( (string) $v );
+		return true;
+	}
+	public static function deleteByName( $k ) {
+		unset( self::$v[ $k ] );
+		return true;
+	}
+}
+class SudemiClient {
+	public static function jsonFlags() {
+		return defined( 'JSON_INVALID_UTF8_SUBSTITUTE' ) ? JSON_INVALID_UTF8_SUBSTITUTE : 0;
+	}
+}
 require __DIR__ . '/../classes/SudemiOrders.php';
 require __DIR__ . '/../classes/SudemiSync.php';
 require __DIR__ . '/../classes/SudemiQueue.php';
@@ -105,6 +124,27 @@ check( 'older core without line prices: catalogue prices', null === SudemiOrders
 check( 'net of 8.50 at 21% (catalogue 10.00 / 12.10)', 702 === SudemiOrders::netOf( 850, 10.0, 12.1 ) );
 check( 'net without tax is the gross', 850 === SudemiOrders::netOf( 850, 8.5, 8.5 ) );
 check( 'net with a zero price is the gross', 850 === SudemiOrders::netOf( 850, 0.0, 0.0 ) );
+
+// 1.4.5 (owner 2026-11-20): automatic confirmation is off unless the shop turned it on, and the
+// orders waiting for an answer are kept for the back-office notice with their dates.
+check( 'auto-confirm: a shop that never saved the setting confirms by hand', false === SudemiOrders::autoConfirmEnabled() );
+SudemiOrders::setAutoConfirm( true );
+check( 'auto-confirm: on when the shop turned it on', true === SudemiOrders::autoConfirmEnabled() );
+SudemiOrders::setAutoConfirm( false );
+check( 'auto-confirm: off when the shop turned it off', false === SudemiOrders::autoConfirmEnabled() );
+$wait = SudemiOrders::waitingEntries( array(
+	array( 'order_id' => 'b', 'respond_by' => '2026-11-22T10:00:00Z', 'total_minor' => 2490, 'currency_code' => 'EUR', 'lines' => array( array( 'title' => 'Mug', 'quantity' => 2 ) ) ),
+	array( 'order_id' => 'a', 'respond_by' => '2026-11-21T09:00:00Z', 'total_minor' => 900, 'currency_code' => 'PLN', 'lines' => array( array( 'title' => 'Tea <b>', 'quantity' => 1 ) ) ),
+	array( 'respond_by' => 'x' ),
+) );
+check( 'waiting orders: soonest deadline first, with items and total', 2 === count( $wait ) && 'a' === $wait[0]['order_id'] && '1 x Tea' === $wait[0]['items'] && 2490 === $wait[1]['total_minor'] );
+SudemiOrders::rememberWaiting( array( array( 'order_id' => 'c', 'respond_by' => '2026-11-21T09:00:00Z', 'lines' => array( array( 'title' => 'Salt & "Pepper" <mill>', 'quantity' => 1 ) ) ) ) );
+check( 'waiting orders kept while confirming by hand (survive the configuration write)', 1 === count( SudemiOrders::waiting() ) && '1 x Salt & "Pepper"' === SudemiOrders::waiting()[0]['items'] );
+SudemiOrders::rememberWaiting( array() );
+check( 'a beat without waiting orders empties the list', array() === SudemiOrders::waiting() );
+SudemiOrders::setAutoConfirm( true );
+SudemiOrders::rememberWaiting( array( array( 'order_id' => 'c' ) ) );
+check( 'with automatic confirmation nothing is kept', array() === SudemiOrders::waiting() );
 
 echo $failures ? "\n$failures check(s) failed\n" : "\nall checks passed\n";
 exit( $failures ? 1 : 0 );

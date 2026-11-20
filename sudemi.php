@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.4.4');
+define('SUDEMI_VERSION', '1.4.5');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -88,6 +88,8 @@ class Sudemi extends Module
             // Back-office page loads are the fallback beat for shops with no cron entry. The
             // hook is admin-only by definition, so a storefront request never pays for it.
             && $this->registerHook('actionAdminControllerSetMedia')
+            // Orders waiting for an answer, on top of every back-office page (1.4.5).
+            && $this->registerHook('displayDashboardTop')
             // Dispatch and delivery, reported back so sudemi can tell the buyer. Hooked to the
             // shop's own status changes rather than asking the merchant for an extra step: a
             // step that has to be remembered is a step that gets skipped.
@@ -258,7 +260,8 @@ class Sudemi extends Module
             && $this->registerOrderPageHooks()
             && $this->registerCombinationHooks()
             && $this->registerSpecificPriceHooks()
-            && $this->registerTrackingHooks();
+            && $this->registerTrackingHooks()
+            && $this->registerHook('displayDashboardTop');
         if ($ok) {
             Configuration::updateValue(self::CONF_SETUP, SUDEMI_VERSION);
         } else {
@@ -393,6 +396,7 @@ class Sudemi extends Module
         SudemiQueue::forget();
         SudemiIssues::forgetQueue();
         Configuration::deleteByName(SudemiIssues::CONF);
+        Configuration::deleteByName(SudemiOrders::CONF_WAITING);
         SudemiSync::forget();
         Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
         Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);
@@ -649,6 +653,35 @@ class Sudemi extends Module
      * paused, correctly - and never attached to a storefront request: a buyer's page load must
      * not wait on our network.
      */
+    /**
+     * Orders from sudemi waiting for this shop's answer (automatic confirmation off), on top of
+     * every back-office page, each with the date to answer by: an order not answered by then is
+     * released (1.4.5, owner 2026-11-20).
+     */
+    public function hookDisplayDashboardTop($params)
+    {
+        $waiting = SudemiClient::isConnected() ? SudemiOrders::waiting() : [];
+        if (empty($waiting)) {
+            return '';
+        }
+        $e = function ($text) {
+            return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8');
+        };
+        $html = '<div class="alert alert-warning" id="sudemi-waiting-orders"><p><strong>'
+            . $e(sprintf(SudemiText::get($this, 'wait_title'), count($waiting))) . '</strong></p><ul>';
+        foreach (array_slice($waiting, 0, 10) as $order) {
+            $currency = (string) $order['currency'];
+            $total = $currency !== '' ? number_format((int) $order['total_minor'] / pow(10, SudemiCurrency::decimals($currency)), SudemiCurrency::decimals($currency), '.', '') . ' ' . $currency : '';
+            $by = (string) $order['respond_by'] !== '' && strtotime((string) $order['respond_by'])
+                ? date('Y-m-d H:i', strtotime((string) $order['respond_by'])) : '-';
+            $html .= '<li>' . $e(sprintf(SudemiText::get($this, 'wait_line'), (string) $order['items'] !== '' ? $order['items'] : $order['order_id'], $total, $by)) . '</li>';
+        }
+        $link = $this->context->link->getAdminLink('AdminSudemiOrders') . '&status=AWAITING_SELLER';
+
+        return $html . '</ul><p>' . $e(SudemiText::get($this, 'wait_note'))
+            . ' <a class="btn btn-primary" href="' . $e($link) . '">' . $e(SudemiText::get($this, 'wait_answer')) . '</a></p></div>';
+    }
+
     public function hookActionAdminControllerSetMedia()
     {
         if (!SudemiClient::isConnected()) {
@@ -726,6 +759,7 @@ class Sudemi extends Module
                 SudemiHeartbeat::forget();
                 SudemiQueue::forget();
                 SudemiIssues::forgetQueue();
+                Configuration::deleteByName(SudemiOrders::CONF_WAITING);
                 SudemiSync::forget();
                 Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
                 Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);
@@ -1396,6 +1430,7 @@ class Sudemi extends Module
                 'title' => SudemiText::get($this, 'auto_title'),
                 'label' => SudemiText::get($this, 'auto_on'),
                 'help' => SudemiText::get($this, 'auto_help'),
+                'default' => SudemiText::get($this, 'auto_default'),
                 'save' => SudemiText::get($this, 'save'),
             ],
             'sudemi_support_not_connected' => $this->l('Connect this shop to sudemi first: support tickets belong to the connected shop. Until then, write to support@sudemi.com.'),

@@ -2148,11 +2148,74 @@ class SudemiOrders
         return $order;
     }
 
+    /** On only when the shop turned it on (1.4.5, owner 2026-11-20: off by default). */
     public static function autoConfirmEnabled()
     {
-        $value = Configuration::get(self::CONF_AUTO_CONFIRM);
+        return (string) Configuration::get(self::CONF_AUTO_CONFIRM) === '1';
+    }
 
-        return $value === false || $value === null || (string) $value !== '0';
+    /** The orders waiting for the shop's answer, from the last heartbeat (JSON, for the notice). */
+    public const CONF_WAITING = 'SUDEMI_WAITING_ORDERS';
+
+    /** The most waiting orders kept for the notice. */
+    public const MAX_WAITING = 50;
+
+    /**
+     * Keeps the orders waiting for an answer (the heartbeat's full pending list, so the copy is
+     * replaced, and emptied when none wait). Only while orders are confirmed by hand.
+     */
+    public static function rememberWaiting($pending)
+    {
+        $list = self::autoConfirmEnabled() ? [] : self::waitingEntries(is_array($pending) ? $pending : []);
+        if (empty($list)) {
+            Configuration::deleteByName(self::CONF_WAITING);
+
+            return;
+        }
+        $json = json_encode($list, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | SudemiClient::jsonFlags());
+        if ($json !== false) {
+            Configuration::updateValue(self::CONF_WAITING, $json);
+        }
+    }
+
+    /** The waiting orders kept for the notice: order_id, respond_by, total_minor, currency, items. Pure. */
+    public static function waitingEntries(array $pending)
+    {
+        $out = [];
+        foreach ($pending as $order) {
+            if (!is_array($order) || empty($order['order_id'])) {
+                continue;
+            }
+            $items = [];
+            foreach (isset($order['lines']) && is_array($order['lines']) ? $order['lines'] : [] as $line) {
+                if (is_array($line) && isset($line['title'])) {
+                    $items[] = (isset($line['quantity']) ? (int) $line['quantity'] : 1) . ' x ' . trim(strip_tags((string) $line['title']));
+                }
+            }
+            $out[] = [
+                'order_id' => (string) $order['order_id'],
+                'respond_by' => isset($order['respond_by']) ? (string) $order['respond_by'] : '',
+                'total_minor' => isset($order['total_minor']) ? (int) $order['total_minor'] : 0,
+                'currency' => isset($order['currency_code']) ? (string) $order['currency_code'] : '',
+                'items' => implode(', ', $items),
+            ];
+            if (count($out) >= self::MAX_WAITING) {
+                break;
+            }
+        }
+        // Soonest deadline first.
+        usort($out, function ($a, $b) {
+            return strcmp($a['respond_by'], $b['respond_by']);
+        });
+
+        return $out;
+    }
+
+    public static function waiting()
+    {
+        $list = json_decode((string) Configuration::get(self::CONF_WAITING), true);
+
+        return is_array($list) ? $list : [];
     }
 
     public static function setAutoConfirm($on)

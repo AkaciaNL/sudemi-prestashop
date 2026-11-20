@@ -117,6 +117,7 @@
       <p><strong>{$sudemi_auto.title|escape:'html':'UTF-8'}</strong></p>
       <div class="checkbox"><label><input type="checkbox" name="sudemi_auto_on" value="1"{if $sudemi_auto.on} checked{/if} /> {$sudemi_auto.label|escape:'html':'UTF-8'}</label></div>
       <p class="help-block">{$sudemi_auto.help|escape:'html':'UTF-8'}</p>
+      <p class="help-block">{$sudemi_auto.default|escape:'html':'UTF-8'}</p>
       <button type="submit" name="sudemi_autoconfirm" value="1" class="btn btn-default">{$sudemi_auto.save|escape:'html':'UTF-8'}</button>
     </form>
 

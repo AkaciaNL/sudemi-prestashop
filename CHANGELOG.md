@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.5
+
+- **New orders are no longer confirmed automatically unless you turn it on** (owner decision
+  2026-11-20). "Accept orders automatically when the products are in stock" (module settings) is
+  now off for a shop that never saved it, so each new order waits for your answer and nothing is
+  accepted before you have checked it. A shop that turned it on keeps it on.
+- **Every back-office page shows the orders from sudemi waiting for your answer**, each with what
+  was ordered, the total and the date to answer by, with a button to the sudemi Orders page. An
+  order not answered by then is released: the buyer is charged nothing and the order is cancelled.
+  sudemi also e-mails you about each new order. The texts are in all twelve languages.
+
 ## 1.4.4
 
 - **Combinations show to buyers as one product with a choice.** Every combination now sends the

@@ -86,6 +86,7 @@ class SudemiIssues {
 }
 class SudemiOrders {
 	public static function reconcile( array $skip = array() ) {}
+	public static function rememberWaiting( $pending ) {}
 	public static function drainCalls() {}
 }
 class Db {
