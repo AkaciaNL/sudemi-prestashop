@@ -771,6 +771,11 @@ class SudemiSync
             }
             $price = Product::getPriceStatic($productId, true, $paid);
             $item['priceMinor'] = self::minor($price);
+            if ((int) $item['priceMinor'] < 1) {
+                // Never sold without a price (never free): this combination is not sent.
+                SudemiIssues::add($item['externalId'], SudemiIssues::MISSING_PRICE, 'error', 'price', 'Not listed: the product has no price.');
+                continue;
+            }
             $quantity = (int) StockAvailable::getQuantityAvailableByProduct($productId, $paid);
             $item['quantity'] = $quantity;
             $item['inStock'] = $quantity > 0;
@@ -1021,8 +1026,12 @@ class SudemiSync
         if ($texts > SudemiVariants::MAX_FIELDS) {
             SudemiIssues::add($productId, SudemiIssues::TOO_MANY_OPTIONAL_TEXTS, 'warning', 'customization', 'Listed, but only ' . SudemiVariants::MAX_FIELDS . ' of ' . $texts . ' texts are asked (optional ones left out).');
         }
-        if ((int) $payload['priceMinor'] < 1) {
-            SudemiIssues::add($productId, SudemiIssues::MISSING_PRICE, 'error', 'price', 'The product has no price.');
+        if ((int) $payload['priceMinor'] < 1 && !$product->hasAttributes()) {
+            // Never sold without a price (never free): not sent, and the shop is told why.
+            // Combinations are checked one by one (listings()).
+            SudemiIssues::add($productId, SudemiIssues::MISSING_PRICE, 'error', 'price', 'Not listed: the product has no price.');
+
+            return null;
         }
 
         // The sale window, quantity prices, availability without stock, size, condition (v2).

@@ -44,6 +44,8 @@
   five texts, a required file upload, "Available for order" off, a product without a price, or
   optional texts beyond five: each catalogue push now tells sudemi (issues), and the "Products on
   sudemi" page lists them with what sudemi refused, in plain words, in your language.
+- **Fix (money): a product or combination without a price is never sent** (never sold free); it
+  is reported as not listed. A combination is checked on its own price.
 - **Fix (money): only prices every buyer gets are sent.** A sale or discount for a customer
   group (for example registered customers only), a single customer or another country was sent
   as everyone's price. Now only specific prices for all groups or the guest group, any or the
