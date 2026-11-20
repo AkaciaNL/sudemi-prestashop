@@ -79,6 +79,11 @@ class SudemiQueue {
 		return 0;
 	}
 }
+class SudemiIssues {
+	public static function drain() {
+		return false;
+	}
+}
 class SudemiOrders {
 	public static function reconcile( array $skip = array() ) {}
 	public static function drainCalls() {}

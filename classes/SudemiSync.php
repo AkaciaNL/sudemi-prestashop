@@ -494,13 +494,20 @@ class SudemiSync
             $listings = [];
             $priced = false;
         }
+        // Issues waiting for this product are stale now: its current ones replace them.
+        $ids = [(string) $product->id];
+        foreach (self::combinationIds($product) as $paid) {
+            $ids[] = self::externalId((int) $product->id, $paid);
+        }
+        SudemiIssues::unqueue($ids);
         if (!empty($listings)) {
             self::pushListings($listings);
 
             return;
         }
-        // Not listed because of something the module left out: sudemi and the shop are told why.
-        self::sendLeftIssues(null);
+        // Not listed because of something the module left out: sudemi and the shop are told why,
+        // with the next push or by the heartbeat, never a request of its own while saving.
+        SudemiIssues::queue(SudemiIssues::take());
         if ($priced) {
             // Switched off: its listings stay on sudemi until a full sync's commit removes them.
             self::noteRemoval();
@@ -578,13 +585,19 @@ class SudemiSync
                 }
             }
 
-            // What was left out of this product goes with its first request (SudemiIssues).
-            $issues = $i === 0 ? SudemiIssues::take() : [];
+            // What was left out of this product goes with its first request (SudemiIssues), and
+            // with it the issues still waiting from earlier saves: no request of their own.
+            $own = $i === 0 ? SudemiIssues::take() : [];
+            $waiting = $i === 0 ? SudemiIssues::queued(max(0, SudemiIssues::MAX_PER_REQUEST - count($own))) : [];
+            $issues = array_merge($own, SudemiIssues::flat($waiting));
             $response = SudemiClient::postSigned('/integration/v1/products', SudemiIssues::attach($body, $issues));
             if (is_array($response) && $response['status'] === 200) {
+                SudemiIssues::sent($waiting);
                 SudemiIssues::remember($batch, $issues, isset($response['body']) ? $response['body'] : null);
             }
             if (!is_array($response) || $response['status'] !== 200) {
+                // Retried with the next push or by the heartbeat.
+                SudemiIssues::queue($own);
                 $clean = false;
                 foreach ($batch as $listing) {
                     SudemiQueue::enqueue(self::priceUpdate($listing));
@@ -597,9 +610,10 @@ class SudemiSync
     }
 
     /**
-     * Issues found while building listings that were all left out (a product not listed): sent on
-     * their own, without products, which sudemi takes from 2026-11-19. Best effort: a core that
-     * refuses a push without products changes nothing here, and the shop sees them all the same.
+     * Issues of a full sync page where nothing was listed (every product left out): sent with the
+     * sync, without products, which sudemi takes from 2026-11-19 (one request per page, from the
+     * sync, never while a product is saved). On failure they wait in the queue
+     * (SudemiIssues::queue) for the next push or the heartbeat.
      */
     private static function sendLeftIssues($syncId, $fresh = false)
     {
@@ -607,12 +621,16 @@ class SudemiSync
         if (empty($left)) {
             return;
         }
-        $body = ['products' => []];
-        if ($syncId !== null) {
-            $body['syncId'] = $syncId;
+        $answer = SudemiClient::postSigned('/integration/v1/products', SudemiIssues::attach(['syncId' => $syncId, 'products' => []], $left));
+        if (!is_array($answer) || $answer['status'] !== 200) {
+            if ($fresh) {
+                SudemiIssues::remember([], [], null, true);
+            }
+            SudemiIssues::queue($left);
+
+            return;
         }
-        $answer = SudemiClient::postSigned('/integration/v1/products', SudemiIssues::attach($body, $left));
-        SudemiIssues::remember([], $left, is_array($answer) && $answer['status'] === 200 && isset($answer['body']) ? $answer['body'] : null, $fresh);
+        SudemiIssues::remember([], $left, isset($answer['body']) ? $answer['body'] : null, $fresh);
     }
 
     /** The price-and-stock part of a listing, as the retry queue keeps it. */

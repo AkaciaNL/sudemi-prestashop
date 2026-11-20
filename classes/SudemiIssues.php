@@ -114,11 +114,54 @@ class SudemiIssues
         return array_slice($kept, -self::MAX_KEPT);
     }
 
+    /** The most bytes kept in the configuration row (a TEXT column holds 64 KB). */
+    public const MAX_BYTES = 50000;
+
+    /**
+     * The kept list as stored: JSON without < > & ' " (the configuration write strips tags),
+     * invalid UTF-8 replaced, \u escapes (fits any database character set), the oldest entries
+     * dropped until it fits MAX_BYTES. Null when it cannot be encoded. Pure.
+     */
+    public static function encode(array $kept, $maxBytes = self::MAX_BYTES)
+    {
+        $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | SudemiClient::jsonFlags();
+        $kept = array_values($kept);
+        while (true) {
+            $json = json_encode($kept, $flags);
+            if ($json === false) {
+                return null;
+            }
+            if (strlen($json) <= $maxBytes || empty($kept)) {
+                return $json;
+            }
+            // Drop the oldest tenth (at least one) and try again.
+            $kept = array_slice($kept, max(1, (int) floor(count($kept) / 10)));
+        }
+    }
+
     /** Keeps what was sent and sudemi's answer (a full sync's first push starts afresh). */
     public static function remember(array $listings, array $issues, $answer, $fresh = false)
     {
         $kept = $fresh ? [] : self::all();
-        Configuration::updateValue(self::CONF, json_encode(self::merge($kept, $listings, $issues, is_array($answer) ? $answer : [], time())));
+        self::store(self::merge($kept, $listings, $issues, is_array($answer) ? $answer : [], time()));
+    }
+
+    /** Writes the kept list; a failed write keeps the list as it was (never emptied silently). */
+    private static function store(array $kept)
+    {
+        $json = self::encode($kept);
+        if ($json === null) {
+            SudemiLogger::warn('Catalogue issues could not be encoded; the list on the "Products on sudemi" page was kept as it was.');
+
+            return false;
+        }
+        if (!Configuration::updateValue(self::CONF, $json)) {
+            SudemiLogger::warn('Catalogue issues could not be saved; the list on the "Products on sudemi" page was kept as it was.');
+
+            return false;
+        }
+
+        return true;
     }
 
     public static function all()
@@ -126,6 +169,167 @@ class SudemiIssues
         $kept = json_decode((string) Configuration::get(self::CONF), true);
 
         return is_array($kept) ? $kept : [];
+    }
+
+    /** Issues not sent yet (no listing push carried them, or it failed), JSON: external id => issues. */
+    public const CONF_QUEUE = 'SUDEMI_PENDING_ISSUES';
+
+    /** The most issues in one request. */
+    public const MAX_PER_REQUEST = 500;
+
+    /**
+     * Keeps issues for the next listing push or the heartbeat, never a request of their own while
+     * a product is saved. The newest issues of a product replace older ones; they show on the
+     * page at once.
+     */
+    public static function queue(array $issues)
+    {
+        if (empty($issues)) {
+            return;
+        }
+        $queued = self::queuedMap();
+        foreach (self::byProduct($issues) as $id => $list) {
+            unset($queued[$id]);
+            $queued[$id] = $list;
+        }
+        self::storeQueue($queued);
+        self::remember([], $issues, null);
+    }
+
+    /** Issues grouped by external id (as plain arrays). Pure. */
+    public static function byProduct(array $issues)
+    {
+        $out = [];
+        foreach ($issues as $issue) {
+            $issue['details'] = (array) $issue['details'];
+            $out[(string) $issue['externalId']][] = $issue;
+        }
+
+        return $out;
+    }
+
+    /** Drops what is waiting for these products: a newer push carries their current state. */
+    public static function unqueue(array $externalIds)
+    {
+        $queued = self::queuedMap();
+        $before = count($queued);
+        foreach ($externalIds as $id) {
+            unset($queued[(string) $id]);
+        }
+        if (count($queued) !== $before) {
+            self::storeQueue($queued);
+        }
+    }
+
+    /** Waiting issues, oldest first, whole products up to $limit issues: [external id => issues]. */
+    public static function queued($limit = self::MAX_PER_REQUEST)
+    {
+        $out = [];
+        $count = 0;
+        if ($limit <= 0) {
+            return $out;
+        }
+        foreach (self::queuedMap() as $id => $list) {
+            if ($count > 0 && $count + count($list) > $limit) {
+                break;
+            }
+            $out[$id] = $list;
+            $count += count($list);
+        }
+
+        return $out;
+    }
+
+    /** The issues of queued() as one wire list. Pure. */
+    public static function flat(array $byProduct)
+    {
+        $out = [];
+        foreach ($byProduct as $list) {
+            foreach ($list as $issue) {
+                $issue['details'] = (object) (isset($issue['details']) ? (array) $issue['details'] : []);
+                $out[] = $issue;
+            }
+        }
+
+        return $out;
+    }
+
+    /** Removes what was sent, unless a newer list for the product came in meanwhile. */
+    public static function sent(array $byProduct)
+    {
+        $queued = self::queuedMap();
+        foreach ($byProduct as $id => $list) {
+            if (isset($queued[$id]) && $queued[$id] == $list) {
+                unset($queued[$id]);
+            }
+        }
+        self::storeQueue($queued);
+    }
+
+    /**
+     * Sends waiting issues on their own (from the heartbeat): one request of at most
+     * MAX_PER_REQUEST, no products (sudemi removes no listing for that). Kept on failure; dropped
+     * when sudemi refuses them for good (the next full sync sends them again).
+     */
+    public static function drain()
+    {
+        $batch = self::queued();
+        if (empty($batch)) {
+            return false;
+        }
+        $issues = self::flat($batch);
+        $answer = SudemiClient::postSigned('/integration/v1/products', self::attach(['products' => []], $issues));
+        if (is_array($answer) && $answer['status'] === 200) {
+            self::sent($batch);
+            self::remember([], $issues, isset($answer['body']) ? $answer['body'] : null);
+
+            return true;
+        }
+        if (is_array($answer) && in_array((int) $answer['status'], [400, 413, 422], true)) {
+            self::sent($batch);
+            SudemiLogger::warn('sudemi refused catalogue issues (HTTP ' . (int) $answer['status'] . '); the next full sync sends them again.');
+        }
+
+        return false;
+    }
+
+    public static function forgetQueue()
+    {
+        Configuration::deleteByName(self::CONF_QUEUE);
+    }
+
+    private static function queuedMap()
+    {
+        $queued = json_decode((string) Configuration::get(self::CONF_QUEUE), true);
+
+        return is_array($queued) ? $queued : [];
+    }
+
+    /** Stored like the kept list (encode()); past MAX_BYTES the oldest products wait for a full sync. */
+    private static function storeQueue(array $queued)
+    {
+        if (empty($queued)) {
+            Configuration::deleteByName(self::CONF_QUEUE);
+
+            return;
+        }
+        $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | SudemiClient::jsonFlags();
+        while (!empty($queued)) {
+            $json = json_encode($queued, $flags);
+            if ($json === false) {
+                SudemiLogger::warn('Waiting catalogue issues could not be encoded; the next full sync sends them again.');
+
+                return;
+            }
+            if (strlen($json) <= self::MAX_BYTES) {
+                if (!Configuration::updateValue(self::CONF_QUEUE, $json)) {
+                    SudemiLogger::warn('Waiting catalogue issues could not be saved; the next full sync sends them again.');
+                }
+
+                return;
+            }
+            $queued = array_slice($queued, max(1, (int) floor(count($queued) / 10)), null, true);
+        }
     }
 
     /** The external ids a list of combination rows of one product would have had. Pure. */

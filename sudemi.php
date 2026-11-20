@@ -391,6 +391,8 @@ class Sudemi extends Module
         // Price changes that never got through go with the credential that would have signed
         // them: leaving them would mean a reinstall pushing stale prices.
         SudemiQueue::forget();
+        SudemiIssues::forgetQueue();
+        Configuration::deleteByName(SudemiIssues::CONF);
         SudemiSync::forget();
         Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
         Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);
@@ -723,6 +725,7 @@ class Sudemi extends Module
                 SudemiPairing::forget();
                 SudemiHeartbeat::forget();
                 SudemiQueue::forget();
+                SudemiIssues::forgetQueue();
                 SudemiSync::forget();
                 Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
                 Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);

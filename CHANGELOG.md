@@ -46,6 +46,10 @@
   sudemi" page lists them with what sudemi refused, in plain words, in your language.
 - **Fix (money): a product or combination without a price is never sent** (never sold free); it
   is reported as not listed. A combination is checked on its own price.
+- What a saved product leaves out no longer costs a request of its own while you save: it goes
+  with the next push or the next heartbeat, in one request, and is retried when sudemi cannot be
+  reached. The list on the "Products on sudemi" page is kept within the configuration's size, and
+  is never emptied by a text it cannot store.
 - **Fix (money): only prices every buyer gets are sent.** A sale or discount for a customer
   group (for example registered customers only), a single customer or another country was sent
   as everyone's price. Now only specific prices for all groups or the guest group, any or the
