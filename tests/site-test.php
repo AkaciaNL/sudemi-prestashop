@@ -84,6 +84,11 @@ class SudemiIssues {
 		return false;
 	}
 }
+class SudemiShippingRules {
+	public static function sendIfDue() {
+		return 'idle';
+	}
+}
 class SudemiOrders {
 	public static function reconcile( array $skip = array() ) {}
 	public static function rememberWaiting( $pending ) {}

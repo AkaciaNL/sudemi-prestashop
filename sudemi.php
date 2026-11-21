@@ -14,7 +14,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-define('SUDEMI_VERSION', '1.4.5');
+define('SUDEMI_VERSION', '1.4.6');
 
 require_once __DIR__ . '/classes/SudemiLogger.php';
 require_once __DIR__ . '/classes/SudemiKeys.php';
@@ -22,6 +22,7 @@ require_once __DIR__ . '/classes/SudemiClient.php';
 require_once __DIR__ . '/classes/SudemiPairing.php';
 require_once __DIR__ . '/classes/SudemiQueue.php';
 require_once __DIR__ . '/classes/SudemiShipping.php';
+require_once __DIR__ . '/classes/SudemiShippingRules.php';
 require_once __DIR__ . '/classes/SudemiWithdrawal.php';
 require_once __DIR__ . '/classes/SudemiCurrency.php';
 require_once __DIR__ . '/classes/SudemiVariants.php';
@@ -105,6 +106,7 @@ class Sudemi extends Module
             && $this->registerCombinationHooks()
             && $this->registerSpecificPriceHooks()
             && $this->registerTrackingHooks()
+            && $this->registerShippingRuleHooks()
             && $this->installTabs()
             && SudemiOrders::ensureSchema()
             && Configuration::updateValue(self::CONF_SETUP, SUDEMI_VERSION);
@@ -261,6 +263,7 @@ class Sudemi extends Module
             && $this->registerCombinationHooks()
             && $this->registerSpecificPriceHooks()
             && $this->registerTrackingHooks()
+            && $this->registerShippingRuleHooks()
             && $this->registerHook('displayDashboardTop');
         if ($ok) {
             Configuration::updateValue(self::CONF_SETUP, SUDEMI_VERSION);
@@ -398,6 +401,7 @@ class Sudemi extends Module
         Configuration::deleteByName(SudemiIssues::CONF);
         Configuration::deleteByName(SudemiOrders::CONF_WAITING);
         SudemiSync::forget();
+        SudemiShippingRules::forget();
         Configuration::deleteByName(SudemiClient::CONF_INSTALL_ID);
         Configuration::deleteByName(SudemiPairing::CONF_CHALLENGE);
         Configuration::deleteByName(SudemiCurrency::CONF_SHOP_CURRENCY);
@@ -629,15 +633,118 @@ class Sudemi extends Module
         }
     }
 
-    /** Shipping prices come from the carriers: a change there re-sends the catalogue on the next heartbeat. */
+    /**
+     * Shipping prices come from the carriers: a change there re-sends the catalogue (each product's
+     * own rates) and the shop's parcel rules on the next background run. Only flags are set here.
+     */
     public function hookActionCarrierUpdate($params)
     {
-        SudemiSync::request();
+        $this->carriersChanged();
     }
 
     public function hookActionObjectCarrierUpdateAfter($params)
     {
+        $this->carriersChanged();
+    }
+
+    /**
+     * The shop's parcel rules (1.4.6, SudemiShippingRules): sent again when a carrier, one of its
+     * price or weight ranges, a zone or a country's zone, or the shipping preferences (handling
+     * fee, free shipping amount) change. Registered on existing installs by upgrade-1.4.6.php and
+     * ensureAdminSetup(). Delivery prices saved without an object hook are caught by the hourly
+     * check in the background.
+     */
+    public function registerShippingRuleHooks()
+    {
+        $ok = true;
+        foreach (self::SHIPPING_RULE_HOOKS as $hook) {
+            $ok = $ok && $this->registerHook($hook);
+        }
+
+        return $ok;
+    }
+
+    public const SHIPPING_RULE_HOOKS = [
+        'actionObjectCarrierAddAfter',
+        'actionObjectCarrierDeleteAfter',
+        'actionObjectRangeWeightAddAfter',
+        'actionObjectRangeWeightUpdateAfter',
+        'actionObjectRangeWeightDeleteAfter',
+        'actionObjectRangePriceAddAfter',
+        'actionObjectRangePriceUpdateAfter',
+        'actionObjectRangePriceDeleteAfter',
+        'actionObjectZoneUpdateAfter',
+        'actionObjectCountryUpdateAfter',
+        'actionAdminShippingPreferencesControllerPostProcessBefore',
+        'actionAdminShippingPreferencesControllerPostProcessHandlingBefore',
+    ];
+
+    public function hookActionObjectCarrierAddAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectCarrierDeleteAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectRangeWeightAddAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectRangeWeightUpdateAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectRangeWeightDeleteAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectRangePriceAddAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectRangePriceUpdateAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectRangePriceDeleteAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectZoneUpdateAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionObjectCountryUpdateAfter($params)
+    {
+        $this->carriersChanged();
+    }
+
+    /** Handling fee or free shipping amount (saved after this hook; the flag is read in the background). */
+    public function hookActionAdminShippingPreferencesControllerPostProcessBefore($params)
+    {
+        $this->carriersChanged();
+    }
+
+    public function hookActionAdminShippingPreferencesControllerPostProcessHandlingBefore($params)
+    {
+        $this->carriersChanged();
+    }
+
+    /** The products' own rates (handling fee, ranges) and the parcel rules: both sent in the background. */
+    private function carriersChanged()
+    {
         SudemiSync::request();
+        SudemiShippingRules::request();
     }
 
     /**

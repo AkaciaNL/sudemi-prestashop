@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.4.6
+
+- **A parcel of several items is charged as your own checkout charges it.** The module now sends
+  your PrestaShop shipping rules to sudemi for every country you deliver to (owner decision
+  2026-11-21: one parcel per shop and country, never undercharge the shop, never overcharge the
+  buyer). Per country the carrier that is cheapest for one item (of the carriers you chose for
+  sudemi) counts, with its price or weight ranges for that zone, your handling fee and the
+  carrier's tax in every range, what happens above the last range (highest range or not
+  delivered) and free shipping from an order amount ("Free shipping starts at"). A free carrier
+  ships every parcel for free. The rules are sent after every catalogue sync and again, in the
+  background, when a carrier, a range, a zone or your shipping preferences change.
+- **Additional shipping cost per product is charged per unit**, as PrestaShop does: it goes with
+  each shipping price as a separate per-unit amount (tax included).
+- **Weights follow your weight unit.** Product weights were always sent as kilograms; they now
+  follow the shop's weight unit (kg, g, lb, oz), rounded up to the gram. A combination's own
+  weight now counts in its shipping price by weight, as it does in your cart.
+- What cannot be copied exactly is never charged lower: a carrier that is disabled out of range
+  and has gaps between its ranges, an unknown weight unit, products that only other carriers may
+  ship, or a module that changes the free shipping amount make sudemi charge the highest price
+  there; a country that only a carrier module prices (live rates) gets no rule. Each is reported
+  to you on sudemi (Your shop > Sync issues) with a link to set the price on sudemi instead.
+  Free shipping by weight cannot be sent and is left out (it only ever makes shipping free).
+
 ## 1.4.5
 
 - **New orders are no longer confirmed automatically unless you turn it on** (owner decision

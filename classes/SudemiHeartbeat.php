@@ -55,6 +55,8 @@ class SudemiHeartbeat
         $drained = SudemiQueue::drain();
         // Catalogue issues no listing push carried (a product not listed): one request at most.
         SudemiIssues::drain();
+        // The shop's parcel rules, when a carrier or setting changed (or hourly, when they differ).
+        SudemiShippingRules::sendIfDue();
 
         $response = SudemiClient::postSigned('/integration/v1/heartbeat', self::body());
 

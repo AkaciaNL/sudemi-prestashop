@@ -291,6 +291,9 @@ class SudemiSync
 
         SudemiHeartbeat::anchor($anchor);
         SudemiLogger::info('Synced ' . (int) $state['sent'] . ' products.');
+        // The shop's parcel rules go with every committed full sync (protocol: shipping rules).
+        SudemiShippingRules::request();
+        SudemiShippingRules::sendIfDue();
 
         return 'done';
     }
@@ -766,7 +769,7 @@ class SudemiSync
         $link = Context::getContext()->link;
         // Photos the shop assigned to each combination (the ones its storefront shows for it).
         $combinationImages = $product->getCombinationImages($languageId);
-        // Shipping depends on the price (free shipping above an amount), not on the combination.
+        // Shipping depends on the price and the weight (a combination's own weight is added).
         $shippingByPrice = [];
         $listings = [];
         foreach ($byCombination as $paid => $attributes) {
@@ -797,7 +800,8 @@ class SudemiSync
             $quantity = (int) StockAvailable::getQuantityAvailableByProduct($productId, $paid);
             $item['quantity'] = $quantity;
             $item['inStock'] = $quantity > 0;
-            $item['weightGrams'] = (int) round(((float) $product->weight + (float) $first['weight']) * 1000);
+            // In PS_WEIGHT_UNIT, rounded up to the gram (the weight bands of SudemiShippingRules).
+            $item['weightGrams'] = SudemiShippingRules::toGrams((float) $product->weight + (float) $first['weight'], Configuration::get('PS_WEIGHT_UNIT'));
             $item['minQuantity'] = isset($first['minimal_quantity']) ? max(1, (int) $first['minimal_quantity']) : $base['minQuantity'];
             // The sale window, quantity prices, availability without stock, size, condition.
             foreach (['availabilityDate', 'availabilityText', 'quantityPrices', 'regularPriceMinor', 'salePriceMinor', 'salePriceFrom', 'salePriceUntil'] as $own) {
@@ -816,9 +820,9 @@ class SudemiSync
                 SudemiIssues::add($item['externalId'], SudemiIssues::TOO_MANY_REQUIRED_TEXTS, 'error', 'customization', 'Not listed: more than ' . SudemiVariants::MAX_FIELDS . ' required texts for the buyer to type.');
                 continue;
             }
-            $priceKey = (string) $item['priceMinor'];
+            $priceKey = (string) $item['priceMinor'] . '|' . (float) $first['weight'];
             if (!isset($shippingByPrice[$priceKey])) {
-                $shippingByPrice[$priceKey] = SudemiShipping::ratesFor($product, $price);
+                $shippingByPrice[$priceKey] = SudemiShipping::ratesFor($product, $price, (float) $first['weight']);
             }
             $item['shipping'] = $shippingByPrice[$priceKey];
             // A combination with its own photos shows only those (a black pot is not shown with
@@ -1022,7 +1026,7 @@ class SudemiSync
             'personalisation' => SudemiVariants::personalisation($fields, [], []),
             // The smallest quantity the shop sells in one order (PrestaShop's minimum quantity).
             'minQuantity' => max(1, (int) $product->minimal_quantity),
-            'weightGrams' => (int) round((float) $product->weight * 1000),
+            'weightGrams' => SudemiShippingRules::toGrams((float) $product->weight, Configuration::get('PS_WEIGHT_UNIT')),
             'categoryExternalIds' => $categories,
             'images' => $images,
             'specs' => $specs,
