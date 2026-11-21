@@ -220,11 +220,20 @@ class SudemiAdminPages
             'tracking' => isset($order['tracking']) && is_array($order['tracking'])
                 ? trim((isset($order['tracking']['carrier']) ? $order['tracking']['carrier'] : '') . ' ' . (isset($order['tracking']['code']) ? $order['tracking']['code'] : '')) : '',
             'payout' => $payout ? $this->payoutLabel($payout) : '',
+            'payout_hold' => $this->holdText($payout),
             'respond_by' => !empty($order['respond_by']) ? $this->time($order['respond_by']) : '',
             'local_ref' => $local ? (string) $local->reference : '',
             'local_url' => $local ? $this->url('AdminOrders', ['id_order' => (int) $local->id, 'vieworder' => 1]) : '',
             'can_ship' => $status === 'PAID',
         ];
+    }
+
+    /** Why the payout is on hold, in the employee's language, or ''. */
+    private function holdText($payout)
+    {
+        $key = SudemiManage::payoutHoldKey($payout);
+
+        return $key !== '' && isset($this->t[$key]) ? $this->t[$key] : '';
     }
 
     private function payoutLabel(array $payout)
@@ -485,6 +494,7 @@ class SudemiAdminPages
                 $this->t['payout_expected'] => isset($payout['expected_minor']) ? $fmt($payout['expected_minor'], $payoutCode) : '',
                 $this->t['payout_paid'] => isset($payout['paid_out_minor']) ? $fmt($payout['paid_out_minor'], $payoutCode) : '',
                 $this->t['payout_due'] => !empty($payout['due_at']) ? $this->time($payout['due_at']) : '',
+                $this->t['payout_on_hold'] => $this->holdText($payout),
             ], [__CLASS__, 'notEmpty']) : [],
             'payout_note' => $payout && !empty($payout['converted']) ? sprintf($this->t['payout_converted'], $payoutCode) : '',
             'request' => $request ? [

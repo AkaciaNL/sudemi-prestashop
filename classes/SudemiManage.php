@@ -50,6 +50,21 @@ class SudemiManage
         ];
     }
 
+    /**
+     * Why an order's payout is on hold (payout.on_hold): the SudemiText key of the reason, '' when
+     * it is not on hold. A reason this module does not know yet is a plain "On hold" (payout_hold),
+     * never the raw code. Pure.
+     */
+    public static function payoutHoldKey($payout)
+    {
+        if (!is_array($payout) || !isset($payout['on_hold']) || !is_string($payout['on_hold']) || trim($payout['on_hold']) === '') {
+            return '';
+        }
+        $reason = trim($payout['on_hold']);
+
+        return in_array($reason, ['chargeback', 'cancellation_request', 'return_request'], true) ? 'payout_hold_' . $reason : 'payout_hold';
+    }
+
     /** A YYYY-MM-DD date that exists, or ''. Pure. */
     public static function date($value)
     {

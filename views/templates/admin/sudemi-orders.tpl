@@ -77,7 +77,7 @@
               <td>{$row.net|escape:'html':'UTF-8'}</td>
               <td>{$row.refunded|escape:'html':'UTF-8'}</td>
               <td>{if $row.can_ship}<input type="text" class="form-control input-sm" name="sudemi_tracking[{$row.id|escape:'html':'UTF-8'}]" maxlength="100" placeholder="{$sudemi_t.tracking_code|escape:'html':'UTF-8'}" />{else}{$row.tracking|escape:'html':'UTF-8'}{/if}</td>
-              <td>{$row.payout|escape:'html':'UTF-8'}</td>
+              <td>{$row.payout|escape:'html':'UTF-8'}{if $row.payout_hold}<br /><small class="sudemi-payout-hold">{$row.payout_hold|escape:'html':'UTF-8'}</small>{/if}</td>
               <td>{if $row.local_url}<a href="{$row.local_url|escape:'html':'UTF-8'}">{$row.local_ref|escape:'html':'UTF-8'}</a>{else}{$sudemi_t.none|escape:'html':'UTF-8'}{/if}</td>
             </tr>
           {/foreach}

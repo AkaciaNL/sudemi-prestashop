@@ -338,6 +338,23 @@ SudemiChanges::retryFailed( function ( $e ) { return true; }, $now );
 check( 'retry: a list of an earlier connection is not used', array() === SudemiClient::$calls && array() === SudemiChanges::retries() );
 Configuration::$values = array();
 
+// ---- why a payout is on hold (payout.on_hold) ----
+check( 'hold: chargeback', 'payout_hold_chargeback' === SudemiManage::payoutHoldKey( array( 'state' => 'scheduled', 'due_at' => null, 'on_hold' => 'chargeback' ) ) );
+check( 'hold: cancellation request', 'payout_hold_cancellation_request' === SudemiManage::payoutHoldKey( array( 'on_hold' => 'cancellation_request' ) ) );
+check( 'hold: return request', 'payout_hold_return_request' === SudemiManage::payoutHoldKey( array( 'on_hold' => 'return_request' ) ) );
+check( 'hold: an unknown future reason is a plain "On hold", never the code', 'payout_hold' === SudemiManage::payoutHoldKey( array( 'on_hold' => 'tax_review' ) ) );
+check( 'hold: null, missing, blank, not a string or no payout: not on hold',
+	'' === SudemiManage::payoutHoldKey( array( 'on_hold' => null, 'due_at' => '2026-12-01T00:00:00Z' ) )
+	&& '' === SudemiManage::payoutHoldKey( array( 'state' => 'scheduled' ) )
+	&& '' === SudemiManage::payoutHoldKey( array( 'on_hold' => ' ' ) )
+	&& '' === SudemiManage::payoutHoldKey( array( 'on_hold' => array( 'x' ) ) )
+	&& '' === SudemiManage::payoutHoldKey( null ) );
+foreach ( array( 'payout_hold', 'payout_hold_chargeback', 'payout_hold_cancellation_request', 'payout_hold_return_request', 'payout_on_hold' ) as $key ) {
+	check( "hold text $key exists", isset( SudemiText::EN[ $key ] ) );
+}
+check( 'hold text in German (the portal\'s wording)', 'Zurückgehalten: offene Rückgabeanfrage' === SudemiText::translate( SudemiText::EN['payout_hold_return_request'], 'de' ) );
+check( 'hold text in Turkish', 'Bekletiliyor: açık kart itirazı (chargeback)' === SudemiText::translate( SudemiText::EN['payout_hold_chargeback'], 'tr' ) );
+
 // ---- every text in all twelve languages (English is the source) ----
 check( 'the texts include the order page block and the shipping page', isset( SudemiText::EN['do_tracking'], SudemiText::EN['ship_prefill'], SudemiText::EN['payouts_delay'] ) );
 foreach ( array( 'nl', 'tr', 'de', 'fr', 'es', 'it', 'pl', 'ru', 'zh', 'ar', 'he' ) as $lang ) {
