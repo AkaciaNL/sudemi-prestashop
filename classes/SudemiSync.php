@@ -32,6 +32,18 @@ class SudemiSync
         return trim(str_replace("\u{00A0}", ' ', $text));
     }
 
+    /**
+     * 1.4.9 (sudemi owner decision 2026-11-26): a product description as HTML, as the rich-text
+     * editor stored it, so buyers see its paragraphs, lists and headings. sudemi keeps only p, br,
+     * ul, ol, li, strong, b, em, i, h3 and h4 (h1/h2 as h3, h5/h6 as h4) and removes everything
+     * else itself: scripts, styles, frames and their content, every attribute, links (their text
+     * stays), images. Entities stay as the HTML has them: sudemi reads them as HTML.
+     */
+    public static function descriptionHtml($html)
+    {
+        return trim((string) $html);
+    }
+
     public const BATCH_SIZE = 100;
 
     /** Set when a full sync should run (sudemi asked, carriers or delivery times changed). */
@@ -1013,7 +1025,7 @@ class SudemiSync
             'gtin' => ((string) $product->ean13) !== '' ? (string) $product->ean13 : (((string) $product->upc) !== '' ? (string) $product->upc : null),
             'mpn' => (string) $product->mpn,
             'title' => (string) $product->name,
-            'description' => self::plain($product->description_short),
+            'description' => self::descriptionHtml($product->description_short),
             'url' => $link->getProductLink($product),
             'priceMinor' => self::minor(Product::getPriceStatic($productId, true)),
             'currency' => self::currency(),

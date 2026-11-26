@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.9
+
+- **Product descriptions keep their paragraphs, lists and headings.** The module sends the
+  product's description as the rich-text editor's HTML instead of as text with every tag removed,
+  so buyers see its paragraphs, bullet lists and headings. sudemi keeps only simple formatting
+  (paragraphs, line breaks, lists, bold, italic and two heading sizes) and removes everything else
+  itself: scripts, styles, embedded frames, images, links (their text stays) and every attribute.
+  AI assistants still read the description as plain text.
+- After the update the module asks for one full catalogue sync, so every product is sent again
+  with its description as HTML. Nothing to do.
+
 ## 1.4.8
 
 - **Faster catalogue sync for products with many combinations.** The product's base price is read
