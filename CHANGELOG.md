@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.8
 
 - **Faster catalogue sync for products with many combinations.** The product's base price is read
   once per product instead of once per combination, and each combination is loaded once instead
