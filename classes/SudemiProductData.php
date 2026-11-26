@@ -177,8 +177,8 @@ class SudemiProductData
         $outOfStock = StockAvailable::outOfStock($id);
         $date = (string) $product->available_date;
         if ($attributeId) {
-            $combination = new Combination((int) $attributeId);
-            if (Validate::isLoadedObject($combination) && self::isDate((string) $combination->available_date)) {
+            $combination = self::combination($attributeId);
+            if ($combination !== null && self::isDate((string) $combination->available_date)) {
                 $date = (string) $combination->available_date;
             }
         }
@@ -223,12 +223,17 @@ class SudemiProductData
     private static function regular(Product $product, $attributeId, callable $minor)
     {
         // The stored price: a Product loaded "full" holds the price after specific prices.
-        $stored = Db::getInstance()->getValue('SELECT price FROM ' . _DB_PREFIX_ . 'product_shop WHERE id_product = ' . (int) $product->id
-            . ' AND id_shop = ' . (int) Context::getContext()->shop->id);
+        // Read once per product (forListing runs once per combination).
+        $id = (int) $product->id;
+        if (!array_key_exists($id, self::$stored)) {
+            self::$stored[$id] = Db::getInstance()->getValue('SELECT price FROM ' . _DB_PREFIX_ . 'product_shop WHERE id_product = ' . $id
+                . ' AND id_shop = ' . (int) Context::getContext()->shop->id);
+        }
+        $stored = self::$stored[$id];
         $excl = $stored !== false && $stored !== null ? (float) $stored : (float) $product->price;
         if ($attributeId) {
-            $combination = new Combination((int) $attributeId);
-            if (Validate::isLoadedObject($combination)) {
+            $combination = self::combination($attributeId);
+            if ($combination !== null) {
                 $excl += (float) $combination->price;
             }
         }
@@ -361,10 +366,29 @@ class SudemiProductData
     /** Rows of one product read in this request (forListing runs once per combination). */
     private static $rows = [];
 
-    /** Forgets the rows read (a new sync, or a price changed since). */
+    /** Stored base prices read in this request, by product id. */
+    private static $stored = [];
+
+    /** The combination forListing is working on (it and regular() both need it). */
+    private static $combination = [null, null];
+
+    /** Forgets what was read (a new sync, or a price changed since). */
     public static function reset()
     {
         self::$rows = [];
+        self::$stored = [];
+        self::$combination = [null, null];
+    }
+
+    /** The combination, loaded once while one listing is built; null when it does not exist. */
+    private static function combination($attributeId)
+    {
+        if (self::$combination[0] !== (int) $attributeId) {
+            $combination = new Combination((int) $attributeId);
+            self::$combination = [(int) $attributeId, Validate::isLoadedObject($combination) ? $combination : null];
+        }
+
+        return self::$combination[1];
     }
 
     /**

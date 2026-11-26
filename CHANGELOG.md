@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Faster catalogue sync for products with many combinations.** The product's base price is read
+  once per product instead of once per combination, and each combination is loaded once instead
+  of twice while its listing is built. What is sent to sudemi does not change.
+
 ## 1.4.7
 
 - **The sudemi Orders page shows why a payout is on hold.** When sudemi holds an order's payout
