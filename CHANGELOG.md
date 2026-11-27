@@ -8,6 +8,9 @@
   (paragraphs, line breaks, lists, bold, italic and two heading sizes) and removes everything else
   itself: scripts, styles, embedded frames, images, links (their text stays) and every attribute.
   AI assistants still read the description as plain text.
+- **The long description is sent too.** Before, only the summary (short description) reached
+  sudemi. Now the summary and the long description are both sent, the summary first; a product
+  with only one of them sends that one.
 - After the update the module asks for one full catalogue sync, so every product is sent again
   with its description as HTML. Nothing to do.
 - **Orders in another currency than the shop default are booked, not declined.** An order placed

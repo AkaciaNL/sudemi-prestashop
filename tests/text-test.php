@@ -33,8 +33,12 @@ $rich = '<h2>Care</h2><p>Salt &amp; Pepper <strong>mill</strong></p><ul><li>Stee
 check( 'a product description is sent as HTML (lists and headings kept)', $rich === SudemiSync::descriptionHtml( "\n" . $rich . ' ' ), SudemiSync::descriptionHtml( $rich ) );
 check( 'an empty product description stays empty', '' === SudemiSync::descriptionHtml( null ) );
 $sync = (string) file_get_contents( __DIR__ . '/../classes/SudemiSync.php' );
-check( 'the listing sends descriptionHtml(), not plain()',
-	1 === preg_match( "/'description' => self::descriptionHtml\\(\\\$product->description_short\\)/", $sync )
+check( 'summary and long description are both sent, summary first', "<p>Short</p>\n<p>Long</p>" === SudemiSync::productDescription( '<p>Short</p>', ' <p>Long</p>' ) );
+check( 'only the long description when there is no summary', '<p>Long</p>' === SudemiSync::productDescription( '', '<p>Long</p>' ) );
+check( 'only the summary when there is no long description', '<p>Short</p>' === SudemiSync::productDescription( '<p>Short</p>', null ) );
+check( 'the same text in both fields is sent once', '<p>Same</p>' === SudemiSync::productDescription( '<p>Same</p>', '<p>Same</p>' ) );
+check( 'the listing sends productDescription(), not plain()',
+	1 === preg_match( "/'description' => self::productDescription\\(\\\$product->description_short, \\\$product->description\\)/", $sync )
 	&& false === strpos( $sync, "'description' => self::plain(\$product->description_short)" ) );
 $upgrade = (string) file_get_contents( __DIR__ . '/../upgrade/upgrade-1.4.9.php' );
 check( 'the 1.4.9 upgrade asks for a full sync (descriptions are sent again)',

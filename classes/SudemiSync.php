@@ -44,6 +44,25 @@ class SudemiSync
         return trim((string) $html);
     }
 
+    /**
+     * The product's whole description: the summary (description_short) and the long description,
+     * both as HTML, the summary first. Only one of them when the other is empty or the same, so a
+     * shop that fills only one field sends just that one. Pure.
+     */
+    public static function productDescription($short, $long)
+    {
+        $short = self::descriptionHtml($short);
+        $long = self::descriptionHtml($long);
+        if ($short === '' || $short === $long) {
+            return $long;
+        }
+        if ($long === '') {
+            return $short;
+        }
+
+        return $short . "\n" . $long;
+    }
+
     public const BATCH_SIZE = 100;
 
     /** Set when a full sync should run (sudemi asked, carriers or delivery times changed). */
@@ -1025,7 +1044,7 @@ class SudemiSync
             'gtin' => ((string) $product->ean13) !== '' ? (string) $product->ean13 : (((string) $product->upc) !== '' ? (string) $product->upc : null),
             'mpn' => (string) $product->mpn,
             'title' => (string) $product->name,
-            'description' => self::descriptionHtml($product->description_short),
+            'description' => self::productDescription($product->description_short, $product->description),
             'url' => $link->getProductLink($product),
             'priceMinor' => self::minor(Product::getPriceStatic($productId, true)),
             'currency' => self::currency(),
