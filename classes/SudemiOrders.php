@@ -97,13 +97,19 @@ class SudemiOrders
             return;
         }
 
-        // An order in another currency than the one this shop sells in is declined rather than
-        // booked in the wrong currency (protocol 4c): the shop's books would show amounts the
-        // buyer never paid.
-        $shortfall = self::currencyProblem($pending);
-        if ($shortfall === null) {
-            $shortfall = self::firstShortfall($pending);
+        // Booked in the currency the buyer paid in, whatever the shop's default currency is now (a
+        // shop that switched from USD to EUR still books its USD orders). Never in another one:
+        // the shop's books would show amounts the buyer never paid. A currency this shop does not
+        // have switched on stops it, and then nothing is booked and nothing is declined: the
+        // order waits, the shop and sudemi are told how to fix it (reportCurrencyProblems), and a
+        // later heartbeat books it once the currency is there.
+        $currencyProblem = self::currencyProblem($pending);
+        if ($currencyProblem !== null) {
+            SudemiLogger::error(sprintf('sudemi order %s waits: %s. %s', $sudemiId, $currencyProblem, SudemiCurrency::CURRENCY_FIX));
+
+            return;
         }
+        $shortfall = self::firstShortfall($pending);
         if ($shortfall !== null) {
             // The ordinary case, and not a failure. The buyer's hold is released within a minute.
             SudemiClient::postSigned(
@@ -1122,6 +1128,79 @@ class SudemiOrders
     }
 
     /**
+     * Tells sudemi (and so the shop's sync issues and sudemi's admin) about the waiting orders this
+     * shop cannot book because of their currency, with how to fix it. Sent on every heartbeat while
+     * there are any (manual and automatic confirmation alike); sudemi closes the issue once a
+     * heartbeat passes without it. Nothing is sent when every waiting order can be booked.
+     *
+     * @param array $pending the heartbeat's pending_orders
+     *
+     * @return bool whether an issue was sent
+     */
+    public static function reportCurrencyProblems($pending)
+    {
+        if (empty($pending) || !is_array($pending)) {
+            return false;
+        }
+        $stuck = [];
+        foreach ($pending as $order) {
+            if (!is_array($order) || empty($order['order_id']) || self::findLocalOrder((string) $order['order_id']) !== null) {
+                continue;
+            }
+            $problem = self::currencyProblem($order);
+            if ($problem !== null) {
+                $stuck[] = [
+                    'order_id' => (string) $order['order_id'],
+                    'currency' => SudemiCurrency::normalise(isset($order['currency_code']) ? $order['currency_code'] : ''),
+                    'respond_by' => isset($order['respond_by']) ? (string) $order['respond_by'] : '',
+                    'reason' => $problem,
+                ];
+            }
+        }
+        $issue = self::currencyIssue($stuck);
+        if ($issue === null) {
+            return false;
+        }
+        $answer = SudemiClient::postSigned('/integration/v1/products', SudemiIssues::attach(['products' => []], [$issue]));
+
+        return is_array($answer) && isset($answer['status']) && (int) $answer['status'] === 200;
+    }
+
+    /**
+     * The shop-wide issue for waiting orders this shop cannot book because of their currency
+     * (sudemi docs/sync-issues.md order_currency_unavailable), or null when there are none. Pure.
+     *
+     * @param array $stuck [order_id, currency, respond_by, reason] per order
+     *
+     * @return array|null
+     */
+    public static function currencyIssue(array $stuck)
+    {
+        if (empty($stuck)) {
+            return null;
+        }
+        usort($stuck, function ($a, $b) {
+            return strcmp($a['respond_by'], $b['respond_by']);
+        });
+        $currencies = array_values(array_unique(array_filter(array_map(function ($o) {
+            return $o['currency'];
+        }, $stuck))));
+        $orders = array_map(function ($o) {
+            return ['orderId' => $o['order_id'], 'currency' => $o['currency'], 'respondBy' => $o['respond_by']];
+        }, array_slice($stuck, 0, 25));
+        $first = $stuck[0];
+
+        return SudemiIssues::make('', SudemiIssues::ORDER_CURRENCY_UNAVAILABLE, 'error', 'currency', sprintf(
+            '%d waiting order(s) cannot be booked in this shop: %s (order %s%s). %s',
+            count($stuck),
+            $first['reason'],
+            substr($first['order_id'], 0, 8),
+            $first['respond_by'] !== '' ? ', answer by ' . $first['respond_by'] : '',
+            SudemiCurrency::CURRENCY_FIX
+        ), ['currencies' => $currencies, 'orders' => $orders, 'platform' => 'prestashop']);
+    }
+
+    /**
      * Records the order so the merchant fulfils it through their normal workflow.
      *
      * A real order rather than a note of our own: it appears where the merchant already looks,
@@ -2068,7 +2147,10 @@ class SudemiOrders
             return ['error' => 'retry'];
         }
         $problem = self::currencyProblem($pending);
-        if ($problem === null) {
+        if ($problem !== null) {
+            // Said with what to do: the order's currency is missing or switched off here.
+            $problem .= '. ' . SudemiCurrency::CURRENCY_FIX;
+        } else {
             $problem = self::firstShortfall($pending);
         }
         if ($problem !== null) {
@@ -2126,8 +2208,17 @@ class SudemiOrders
             return self::findLocalOrder($sudemiId);
         }
         $pending = self::pendingFromDetail($detail);
-        if ($pending === null || self::currencyProblem($pending) !== null) {
-            SudemiLogger::error(sprintf('sudemi order %s was accepted on sudemi, but could not be booked in this shop (no lines, or another currency). Book it by hand.', $sudemiId));
+        if ($pending === null) {
+            SudemiLogger::error(sprintf('sudemi order %s was accepted on sudemi, but could not be booked in this shop (no lines). Book it by hand.', $sudemiId));
+
+            return null;
+        }
+        $problem = self::currencyProblem($pending);
+        if ($problem !== null) {
+            // Kept on the retry list (read again on later heartbeats) so it is booked as soon as
+            // the currency is switched on.
+            SudemiLogger::error(sprintf('sudemi order %s was accepted on sudemi but cannot be booked here yet: %s. %s',
+                $sudemiId, $problem, SudemiCurrency::CURRENCY_FIX));
 
             return null;
         }

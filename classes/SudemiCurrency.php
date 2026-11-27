@@ -80,14 +80,21 @@ class SudemiCurrency
         return number_format(self::fromMinor($minor, $code), $decimals, '.', '') . ($code !== '' ? ' ' . $code : '');
     }
 
+    /** How the merchant fixes an order whose currency this shop cannot book (log, Orders page, sudemi issue). */
+    const CURRENCY_FIX = 'Install or switch on the currency under International > Localization > Currencies and the order is booked on the next heartbeat, or decline the order on the sudemi Orders page. sudemi declines it itself when its respond-by time passes.';
+
     /**
      * Why a pending order cannot be booked in this shop, or null when it can.
      *
-     * Old cores send no currency_code: null, and the order is booked as before. The reasons go
-     * to sudemi as the decline reason, so they are plain words.
+     * Old cores send no currency_code: null, and the order is booked as before. The shop's
+     * default currency ($shopCode) does not matter: PrestaShop books an order in any installed,
+     * switched-on currency (amounts in that currency, conversion_rate its rate), as its own
+     * checkout does. Before, an order in another currency than the default was refused, so a
+     * shop that changed its default currency could not book the orders placed before the change
+     * (owner 2026-11-27). Plain words for the merchant.
      *
      * @param string $orderCode the order's currency_code
-     * @param string $shopCode the currency this shop sells in (its default currency)
+     * @param string $shopCode the currency this shop sells in (its default currency); not used
      * @param bool $activeInShop whether PrestaShop has that currency installed and switched on
      */
     public static function orderProblem($orderCode, $shopCode, $activeInShop)
@@ -99,12 +106,8 @@ class SudemiCurrency
         if ($order === '') {
             return 'the order has no recognisable currency';
         }
-        $shop = self::normalise($shopCode);
-        if ($shop !== '' && $order !== $shop) {
-            return sprintf('the order is in %s, but this shop sells in %s', $order, $shop);
-        }
         if (!$activeInShop) {
-            return sprintf('the currency %s is not switched on in this shop', $order);
+            return sprintf('the order was paid in %s and the %s currency is not installed or not switched on in this shop', $order, $order);
         }
 
         return null;

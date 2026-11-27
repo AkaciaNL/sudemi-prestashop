@@ -25,6 +25,12 @@ class SudemiIssues
     public const REQUIRED_FILE_UPLOAD = 'required_file_upload';
     public const NOT_AVAILABLE_FOR_ORDER = 'not_available_for_order';
     public const MISSING_PRICE = 'missing_price';
+    /**
+     * Shop-wide, not about a product: waiting sudemi orders are in a currency this shop does not
+     * have installed or switched on, so they cannot be booked (SudemiOrders::reportCurrencyProblems).
+     * Sent on its own on every heartbeat while it holds, never kept on the catalogue issues list.
+     */
+    public const ORDER_CURRENCY_UNAVAILABLE = 'order_currency_unavailable';
 
     /** The codes the page has plain words for (SudemiText 'is_<code>'). */
     public const CODES = [self::TOO_MANY_REQUIRED_TEXTS, self::TOO_MANY_OPTIONAL_TEXTS, self::REQUIRED_FILE_UPLOAD,

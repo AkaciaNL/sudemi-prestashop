@@ -64,11 +64,15 @@ check( 'old core without currency_code: booked as before', null === SudemiCurren
 check( 'empty currency_code: booked as before', null === SudemiCurrency::orderProblem( '', 'PLN', false ) );
 check( 'order in the shop currency, switched on: booked', null === SudemiCurrency::orderProblem( 'PLN', 'PLN', true ) );
 check( 'lower-case code is the same currency', null === SudemiCurrency::orderProblem( 'pln', 'PLN', true ) );
-$problem = SudemiCurrency::orderProblem( 'EUR', 'PLN', true );
-check( 'order in EUR at a PLN shop is declined, naming both', is_string( $problem ) && false !== strpos( $problem, 'EUR' ) && false !== strpos( $problem, 'PLN' ) );
-$problem = SudemiCurrency::orderProblem( 'CZK', 'CZK', false );
-check( 'order in a currency not switched on in the shop is declined', is_string( $problem ) && false !== strpos( $problem, 'not switched on' ) );
-check( 'garbage currency_code is declined', is_string( SudemiCurrency::orderProblem( 'E1', 'EUR', true ) ) );
+// Owner 2026-11-27: a shop that changed its default currency (USD to EUR) still books the orders
+// placed before in the currency they were paid in, as long as that currency is switched on.
+check( 'order in USD at a shop now on EUR, USD switched on: booked (in USD)', null === SudemiCurrency::orderProblem( 'USD', 'EUR', true ) );
+$problem = SudemiCurrency::orderProblem( 'CZK', 'EUR', false );
+check( 'order in a currency not installed or switched on: not bookable, named, with no default-currency wording',
+	'the order was paid in CZK and the CZK currency is not installed or not switched on in this shop' === $problem );
+check( 'garbage currency_code is not bookable', is_string( SudemiCurrency::orderProblem( 'E1', 'EUR', true ) ) );
+check( 'the fix names the PrestaShop menu and declining', false !== strpos( SudemiCurrency::CURRENCY_FIX, 'International > Localization > Currencies' )
+	&& false !== strpos( SudemiCurrency::CURRENCY_FIX, 'decline the order' ) );
 
 // Refunds.
 $r = SudemiCurrency::refundBody( 1250, 'Partial refund (credit slip)', 'SEK', 'SEK' );

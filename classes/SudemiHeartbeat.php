@@ -140,6 +140,13 @@ class SudemiHeartbeat
         SudemiOrders::rememberWaiting(isset($body['pending_orders']) ? $body['pending_orders'] : []);
         if (!empty($body['pending_orders'])) {
             SudemiOrders::handlePending($body['pending_orders']);
+            // Waiting orders in a currency this shop does not have switched on: the shop and
+            // sudemi are told how to fix it, on every beat while it holds (manual answers too).
+            try {
+                SudemiOrders::reportCurrencyProblems($body['pending_orders']);
+            } catch (Exception $e) {
+                SudemiLogger::error('Could not report the orders that wait for a currency: ' . $e->getMessage());
+            }
         }
 
         // Orders this shop accepted while the buyer's payment still covered other shops: now

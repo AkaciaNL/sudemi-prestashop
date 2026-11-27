@@ -146,5 +146,24 @@ SudemiOrders::setAutoConfirm( true );
 SudemiOrders::rememberWaiting( array( array( 'order_id' => 'c' ) ) );
 check( 'with automatic confirmation nothing is kept', array() === SudemiOrders::waiting() );
 
+// Owner 2026-11-27: waiting orders in a currency the shop does not have are reported to sudemi as
+// one shop-wide issue with how to fix it (never declined by the module).
+require_once __DIR__ . '/../classes/SudemiCurrency.php';
+require_once __DIR__ . '/../classes/SudemiIssues.php';
+check( 'currency issue: none for none', null === SudemiOrders::currencyIssue( array() ) );
+$issue = SudemiOrders::currencyIssue( array(
+	array( 'order_id' => 'bbbbbbbb-1', 'currency' => 'GBP', 'respond_by' => '2026-11-30T00:00:00Z', 'reason' => 'the order was paid in GBP and the GBP currency is not installed or not switched on in this shop' ),
+	array( 'order_id' => 'aaaaaaaa-2', 'currency' => 'CHF', 'respond_by' => '2026-11-29T00:00:00Z', 'reason' => 'the order was paid in CHF and the CHF currency is not installed or not switched on in this shop' ),
+	array( 'order_id' => 'cccccccc-3', 'currency' => 'GBP', 'respond_by' => '2026-12-01T00:00:00Z', 'reason' => 'r' ),
+) );
+check( 'currency issue: shop-wide order_currency_unavailable error on the currency field',
+	'' === $issue['externalId'] && 'order_currency_unavailable' === $issue['code'] && 'error' === $issue['severity'] && 'currency' === $issue['field'] );
+check( 'currency issue: soonest deadline first, each currency once, the count, the first reason and the fix',
+	'aaaaaaaa-2' === $issue['details']->orders[0]['orderId'] && '2026-11-29T00:00:00Z' === $issue['details']->orders[0]['respondBy']
+	&& array( 'CHF', 'GBP' ) === $issue['details']->currencies && 'prestashop' === $issue['details']->platform
+	&& 0 === strpos( $issue['message'], '3 waiting order(s) cannot be booked in this shop: the order was paid in CHF' )
+	&& false !== strpos( $issue['message'], '(order aaaaaaaa, answer by 2026-11-29T00:00:00Z)' )
+	&& false !== strpos( $issue['message'], SudemiCurrency::CURRENCY_FIX ) );
+
 echo $failures ? "\n$failures check(s) failed\n" : "\nall checks passed\n";
 exit( $failures ? 1 : 0 );
